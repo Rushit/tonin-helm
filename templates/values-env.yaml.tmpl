@@ -1,0 +1,17 @@
+# {{ env_name }}-specific overrides.
+# Only fields that differ from values.yaml are listed here.
+
+replicaCount: {{ replicas }}
+
+image:
+  tag: "{{ version }}"
+
+autoscaling:
+  enabled: {% if has_autoscale %}true{% else %}false{% endif %}
+  minReplicas: {{ replicas }}
+  maxReplicas: {{ max_replicas }}
+{% if expose %}
+ingress:
+  enabled: true
+  host: "{{ expose }}"
+{% endif %}

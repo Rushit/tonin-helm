@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Pre-commit hook: mirrors the `make ci` gate (fmt-check + clippy + test + doc).
+# Install once with:  chmod +x .git/hooks/pre-commit
+# Or wire up automatically via: make install-hooks  (see Makefile)
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "pre-commit: fmt-check..."
+cargo fmt -- --check
+
+echo "pre-commit: clippy..."
+cargo clippy --all-targets -- -D warnings
+
+echo "pre-commit: test..."
+cargo test
+
+echo "pre-commit: doc..."
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --quiet
+
+echo "pre-commit: ok"

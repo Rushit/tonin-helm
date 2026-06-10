@@ -1,0 +1,51 @@
+# Base values — environment-independent defaults.
+# Override per-environment with values-<env>.yaml.
+
+replicaCount: {{ replicas }}
+
+image:
+  repository: "{{ image_repository }}"
+  tag: "{{ version }}"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  grpcPort: 50051
+  mcpPort: 50052
+
+mcpSidecar: {{ mcp_sidecar }}
+
+resources:
+  requests:
+    cpu: "{{ cpu }}"
+    memory: "{{ memory }}"
+  limits:
+    cpu: "{{ cpu }}"
+    memory: "{{ memory }}"
+
+autoscaling:
+  enabled: {% if has_autoscale %}true{% else %}false{% endif %}
+  minReplicas: {{ replicas }}
+  maxReplicas: {{ max_replicas }}
+
+ingress:
+  enabled: {% if expose %}true{% else %}false{% endif %}
+  host: "{{ expose | default(value="") }}"
+
+mesh: "{{ mesh }}"
+
+observability:
+  otlpEndpoint: "http://otel-collector.observability.svc.cluster.local:4317"
+
+# Extra env vars injected verbatim into the container.
+env: {}
+
+# Stateful dependencies — populated by tonin helm generate when tonin.toml
+# declares [database] or [cache] blocks.
+database:
+  enabled: {% if has_database %}true{% else %}false{% endif %}
+  engine: "{{ database_engine | default(value="none") }}"
+
+cache:
+  enabled: {% if has_cache %}true{% else %}false{% endif %}
+  engine: "{{ cache_engine | default(value="none") }}"

@@ -1,0 +1,28 @@
+[package]
+name        = "tonin-helm"
+version     = "0.1.0"
+edition     = "2021"
+rust-version = "1.90"
+license     = "MIT OR Apache-2.0"
+repository  = "https://github.com/Rushit/tonin-helm"
+homepage    = "https://github.com/Rushit/tonin-helm"
+description = "Helm chart generation and lifecycle management for tonin services."
+keywords    = ["tonin", "helm", "kubernetes", "microservices"]
+categories  = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "tonin-helm"
+path = "src/main.rs"
+
+[dependencies]
+# Plan API — reads tonin.toml and resolves env overlays.
+# Path dep for local development; swap to `version = "0.4"` on crates.io once published.
+tonin-plugin = { path = "../tonin/crates/tonin-plugin" }
+
+anyhow        = "1"
+clap          = { version = "4", features = ["derive"] }
+tera          = "1"
+include_dir   = "0.7"
+serde         = { version = "1", features = ["derive"] }
+serde_yaml    = "0.9"
+tempfile      = "3"

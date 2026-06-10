@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "service.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "service.selectorLabels" . | nindent 8 }}
+        service.identity: {{ include "service.name" . }}.{{ .Release.Namespace }}
+    spec:
+      containers:
+        - name: server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/usr/local/bin/{{ include "service.name" . }}"]
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: {{ include "service.name" . | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.observability.otlpEndpoint | quote }}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace={{ .Release.Namespace }},service.version={{ .Values.image.tag }}"
+            - name: RUST_LOG
+              value: "info"
+            {{- range $k, $v := .Values.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          ports:
+            - containerPort: {{ .Values.service.grpcPort }}
+              name: grpc
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        {{- if .Values.mcpSidecar }}
+        - name: mcp
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["/usr/local/bin/{{ include "service.name" . }}-mcp"]
+          env:
+            - name: GRPC_ENDPOINT
+              value: "http://localhost:{{ .Values.service.grpcPort }}"
+            - name: OTEL_SERVICE_NAME
+              value: "{{ include "service.name" . }}-mcp"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.observability.otlpEndpoint | quote }}
+          ports:
+            - containerPort: {{ .Values.service.mcpPort }}
+              name: mcp
+          resources:
+            requests: { cpu: "50m",  memory: "64Mi"  }
+            limits:   { cpu: "200m", memory: "128Mi" }
+        {{- end }}
