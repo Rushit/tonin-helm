@@ -82,10 +82,9 @@ Two categories, both embedded via `include_dir`:
 - `select_env(hint)` — `$TONIN_ENV` → hint → `"dev"`
 - All resolved types: `DatabaseSpec`, `CacheSpec`, `Mesh`, `ServiceKind`, etc.
 
-**Git dep status:** `Cargo.toml` uses `git = "https://github.com/Rushit/tonin", tag = "v0.5.2"`.
-This resolves directly from GitHub so CI needs only a single checkout and contributors
-don't need the `tonin` repo alongside. Once `tonin-plugin` is published to crates.io,
-replace with the plain version dep `tonin-plugin = "0.5.2"`.
+**Version dep:** `Cargo.toml` uses `tonin-plugin = "0.5.4"` (crates.io). Cargo resolves
+the latest compatible patch automatically. When `tonin-plugin` gains a new field that
+`tonin-helm` needs, bump the lower bound here to match.
 
 ## Adding a command
 

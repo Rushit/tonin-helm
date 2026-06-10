@@ -16,9 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Plan API — reads tonin.toml and resolves env overlays.
-# Switch to the plain version dep once tonin-plugin is on crates.io:
-#   tonin-plugin = "0.5.3"
-tonin-plugin = { git = "https://github.com/Rushit/tonin", tag = "v0.5.3" }
+tonin-plugin = "0.5.4"
 
 anyhow        = "1"
 clap          = { version = "4", features = ["derive"] }

@@ -69,9 +69,7 @@ release: version ## Bump, tag, and push vX.Y.Z to origin (fires release CI)
 	@echo "✓ v$(VERSION) released. .github/workflows/release.yml is running:"
 	@echo "  https://github.com/Rushit/tonin-helm/actions"
 
-publish: ## Publish tonin-helm to crates.io (requires CARGO_REGISTRY_TOKEN + tonin-plugin on crates.io)
+publish: ## Publish tonin-helm to crates.io (requires CARGO_REGISTRY_TOKEN)
 	@test -n "$${CARGO_REGISTRY_TOKEN}" || \
 	  (echo "CARGO_REGISTRY_TOKEN not set" >&2; exit 1)
-	@grep -q 'tonin-plugin.*git' Cargo.toml && \
-	  (echo "error: replace the git dep on tonin-plugin with a version dep before publishing" >&2; exit 1) || true
 	$(CARGO) publish

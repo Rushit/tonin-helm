@@ -166,9 +166,6 @@ jobs:
 
   # -------------------------------------------------------------------------
   # Publish to crates.io.
-  # Skipped while the git dep on tonin-plugin is still present — cargo publish
-  # does not allow git deps. Replace with `tonin-plugin = "0.5.2"` once
-  # tonin-plugin is on crates.io, then remove this skip check.
   # -------------------------------------------------------------------------
   publish-crate:
     name: Publish to crates.io
@@ -181,34 +178,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check if publishable (no git deps)
-        id: can-publish
-        run: |
-          if grep -q 'tonin-plugin.*git' Cargo.toml; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Install Rust 1.90
-        if: steps.can-publish.outputs.skip == 'false'
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.90"
 
       - name: Cache cargo
-        if: steps.can-publish.outputs.skip == 'false'
         uses: Swatinem/rust-cache@v2
 
       - name: cargo publish
-        if: steps.can-publish.outputs.skip == 'false'
         run: cargo publish
-
-      - name: Skip notice
-        if: steps.can-publish.outputs.skip == 'true'
-        run: |
-          echo "::notice::crates.io publish skipped — tonin-plugin git dep still present."
-          echo "::notice::Replace with tonin-plugin = \"0.5.2\" once it is on crates.io."
 
   # -------------------------------------------------------------------------
   # Flip draft Release to published.
