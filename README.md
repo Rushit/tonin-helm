@@ -49,8 +49,8 @@ already up to date.
 # Update tonin-helm (and tonin) together
 curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh | bash -s -- --with-tonin-helm
 
-# Update to a specific version
-curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh | bash -s -- --with-tonin-helm --version v0.5.4
+# Update to a specific tonin-helm version
+curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh | bash -s -- --with-tonin-helm --helm-version v0.1.1
 
 # Via cargo-binstall
 cargo binstall tonin-helm
