@@ -22,18 +22,25 @@ No Helm chart YAML to hand-write. `tonin.toml` is still the single source of tru
 
 ## Install
 
+**Install tonin + tonin-helm (recommended):**
 ```bash
-# 1. Install script (auto-detects OS/arch, installs to ~/.cargo/bin)
-#    Recommended: installs both tonin + tonin-helm in one step.
-curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh | bash -s -- --with-tonin-helm
+curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh \
+  | bash -s -- --with-tonin-helm
+```
 
-# Custom install directory
-curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh | bash -s -- --with-tonin-helm --dir /usr/local/bin
+**Custom install directory:**
+```bash
+curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh \
+  | bash -s -- --with-tonin-helm --dir /usr/local/bin
+```
 
-# 2. cargo-binstall (downloads the same pre-built archive)
+**Via cargo-binstall:**
+```bash
 cargo binstall tonin-helm
+```
 
-# 3. Build from source
+**Build from source:**
+```bash
 cargo install tonin-helm
 ```
 
@@ -45,14 +52,22 @@ no extra configuration needed.
 Re-running the install script upgrades to the latest release and skips the download if
 already up to date.
 
+**Update tonin + tonin-helm to latest:**
 ```bash
-# Update tonin-helm (and tonin) together
-curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh | bash -s -- --with-tonin-helm
+curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh \
+  | bash -s -- --with-tonin-helm
+```
 
-# Update to a specific tonin-helm version
-curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh | bash -s -- --with-tonin-helm --helm-version v0.1.1
+**Pin a specific tonin-helm version:**
+```bash
+curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh \
+  | bash -s -- \
+      --with-tonin-helm \
+      --helm-version v0.1.1
+```
 
-# Via cargo-binstall
+**Via cargo-binstall:**
+```bash
 cargo binstall tonin-helm
 ```
 
