@@ -23,21 +23,38 @@ No Helm chart YAML to hand-write. `tonin.toml` is still the single source of tru
 ## Install
 
 ```bash
-# Pre-built binary (fastest, no compile)
-# Browse: https://github.com/Rushit/tonin-helm/releases/latest
-TARGET=x86_64-unknown-linux-gnu
-curl -L "https://github.com/Rushit/tonin-helm/releases/latest/download/tonin-helm-${TARGET}.tar.gz" \
-  | tar -xz -C /usr/local/bin tonin-helm
+# 1. Install script (auto-detects OS/arch, installs to ~/.cargo/bin)
+#    Recommended: installs both tonin + tonin-helm in one step.
+curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh | bash -s -- --with-tonin-helm
 
-# cargo-binstall (downloads the same pre-built archive)
+# Custom install directory
+curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh | bash -s -- --with-tonin-helm --dir /usr/local/bin
+
+# 2. cargo-binstall (downloads the same pre-built archive)
 cargo binstall tonin-helm
 
-# Build from source
+# 3. Build from source
 cargo install tonin-helm
 ```
 
 `tonin` dispatches to `tonin-helm` automatically once the binary is on your `$PATH` —
 no extra configuration needed.
+
+## Update
+
+Re-running the install script upgrades to the latest release and skips the download if
+already up to date.
+
+```bash
+# Update tonin-helm (and tonin) together
+curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh | bash -s -- --with-tonin-helm
+
+# Update to a specific version
+curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh | bash -s -- --with-tonin-helm --version v0.5.4
+
+# Via cargo-binstall
+cargo binstall tonin-helm
+```
 
 ---
 
@@ -115,7 +132,24 @@ chart values:
 
 ## Requirements
 
-- `helm` 3.x on `$PATH`
+### helm CLI
+
+`tonin-helm` wraps `helm` — it must be installed and on your `$PATH` before use.
+
+See the [official Helm install guide](https://helm.sh/docs/intro/install/) for all options.
+Quick install to `~/.local/bin` (no sudo):
+
+```bash
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4
+chmod 700 get_helm.sh
+HELM_INSTALL_DIR=$HOME/.local/bin USE_SUDO=false ./get_helm.sh
+rm get_helm.sh
+```
+
+Verify: `helm version`
+
+### Other requirements
+
 - `tonin` CLI (for the `tonin helm` dispatch)
 - A `tonin.toml` in the service directory
 
@@ -134,4 +168,4 @@ never requires a `tonin` CLI upgrade.
 
 ## License
 
-Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option.
+Licensed under the [Apache License, Version 2.0](LICENSE).
