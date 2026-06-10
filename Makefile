@@ -72,6 +72,6 @@ release: version ## Bump, tag, and push vX.Y.Z to origin (fires release CI)
 publish: ## Publish tonin-helm to crates.io (requires CARGO_REGISTRY_TOKEN + tonin-plugin on crates.io)
 	@test -n "$${CARGO_REGISTRY_TOKEN}" || \
 	  (echo "CARGO_REGISTRY_TOKEN not set" >&2; exit 1)
-	@grep -q 'tonin-plugin.*path' Cargo.toml && \
-	  (echo "error: remove the path dep on tonin-plugin before publishing" >&2; exit 1) || true
+	@grep -q 'tonin-plugin.*git' Cargo.toml && \
+	  (echo "error: replace the git dep on tonin-plugin with a version dep before publishing" >&2; exit 1) || true
 	$(CARGO) publish

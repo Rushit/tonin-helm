@@ -3,25 +3,22 @@
 # Triggered by pushing a vX.Y.Z tag (via `make release VERSION=X.Y.Z`).
 #
 # Jobs:
-#   verify        — tag matches Cargo.toml version
-#   test          — full `make ci` gate at the tagged commit
-#   create-release — open a draft GitHub Release so binary uploads have a target
-#   build-binaries — cross-platform tonin-helm binaries, uploaded to the Release
+#   verify         — tag matches Cargo.toml version
+#   test           — full `make ci` gate at the tagged commit
+#   create-release — open a draft GitHub Release
+#   build-binaries — cross-platform tonin-helm binaries uploaded to the Release
 #   publish-crate  — cargo publish to crates.io
-#                    NOTE: blocked until tonin-plugin is on crates.io (the path
-#                    dep in Cargo.toml must be replaced with a registry dep first).
+#                    NOTE: blocked until tonin-plugin is on crates.io (the git
+#                    dep in Cargo.toml must be replaced with a plain version dep).
 #                    This step is skipped automatically until then.
-#   finalize-release — flip draft → published once all jobs succeed
+#   finalize-release — flip draft → published
 #
 # Binary targets:
-#   x86_64-unknown-linux-gnu   (Linux x86_64)
-#   aarch64-unknown-linux-gnu  (Linux ARM64)
-#   x86_64-apple-darwin        (macOS Intel)
-#   aarch64-apple-darwin       (macOS Apple Silicon)
-#   x86_64-pc-windows-msvc     (Windows x86_64)
+#   x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu,
+#   x86_64-apple-darwin, aarch64-apple-darwin, x86_64-pc-windows-msvc
 #
 # Required secrets:
-#   GITHUB_TOKEN          — auto-provided, used for Release assets
+#   GITHUB_TOKEN          — auto-provided
 #   CARGO_REGISTRY_TOKEN  — crates.io API token (Settings → Secrets → Actions)
 
 name: Release
@@ -74,7 +71,6 @@ jobs:
           echo "Cargo.toml:    ${CARGO_VERSION}"
           if [ "${TAG_VERSION}" != "${CARGO_VERSION}" ]; then
             echo "::error::Tag ${REF} does not match Cargo.toml version (${CARGO_VERSION})." >&2
-            echo "::error::Run: make release VERSION=${CARGO_VERSION}" >&2
             exit 1
           fi
 
@@ -90,24 +86,7 @@ jobs:
       RUST_BACKTRACE: 1
 
     steps:
-      - name: Checkout tonin-helm
-        uses: actions/checkout@v4
-        with:
-          path: tonin-helm
-
-      - name: Read tonin-plugin version
-        id: plugin
-        run: |
-          ver=$(grep 'tonin-plugin' tonin-helm/Cargo.toml \
-                | grep -oP '(?<=version = ")[^"]+' | head -1)
-          echo "ver=$ver" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout tonin at v${{ steps.plugin.outputs.ver }}
-        uses: actions/checkout@v4
-        with:
-          repository: Rushit/tonin
-          ref: v${{ steps.plugin.outputs.ver }}
-          path: tonin
+      - uses: actions/checkout@v4
 
       - name: Install Rust 1.90
         uses: dtolnay/rust-toolchain@master
@@ -117,11 +96,8 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: tonin-helm
 
       - name: make ci
-        working-directory: tonin-helm
         run: make ci
 
   # -------------------------------------------------------------------------
@@ -163,25 +139,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout tonin-helm
-        uses: actions/checkout@v4
-        with:
-          path: tonin-helm
-
-      - name: Read tonin-plugin version
-        id: plugin
-        shell: bash
-        run: |
-          ver=$(grep 'tonin-plugin' tonin-helm/Cargo.toml \
-                | grep -oP '(?<=version = ")[^"]+' | head -1)
-          echo "ver=$ver" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout tonin at v${{ steps.plugin.outputs.ver }}
-        uses: actions/checkout@v4
-        with:
-          repository: Rushit/tonin
-          ref: v${{ steps.plugin.outputs.ver }}
-          path: tonin
+      - uses: actions/checkout@v4
 
       - name: Install Rust 1.90 + target
         uses: dtolnay/rust-toolchain@master
@@ -192,7 +150,6 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: tonin-helm
           key: ${{ matrix.target }}
 
       - name: Build and upload tonin-helm
@@ -204,14 +161,14 @@ jobs:
           tar: unix
           zip: windows
           checksum: sha256
-          manifest-path: tonin-helm/Cargo.toml
           ref: ${{ github.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
   # -------------------------------------------------------------------------
   # Publish to crates.io.
-  # TODO: enable once tonin-plugin is published to crates.io and the path
-  # dep in Cargo.toml is replaced with a plain version constraint.
+  # Skipped while the git dep on tonin-plugin is still present — cargo publish
+  # does not allow git deps. Replace with `tonin-plugin = "0.5.2"` once
+  # tonin-plugin is on crates.io, then remove this skip check.
   # -------------------------------------------------------------------------
   publish-crate:
     name: Publish to crates.io
@@ -222,20 +179,16 @@ jobs:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
     steps:
-      - name: Check if publishable (no path deps)
+      - uses: actions/checkout@v4
+
+      - name: Check if publishable (no git deps)
         id: can-publish
         run: |
-          # Skip publish if Cargo.toml still has a path dep on tonin-plugin.
-          if grep -q 'tonin-plugin.*path' "$GITHUB_WORKSPACE/../tonin-helm/Cargo.toml" 2>/dev/null || \
-             [ ! -f "$GITHUB_WORKSPACE/../tonin-helm/Cargo.toml" ]; then
+          if grep -q 'tonin-plugin.*git' Cargo.toml; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Checkout tonin-helm
-        if: steps.can-publish.outputs.skip == 'false'
-        uses: actions/checkout@v4
 
       - name: Install Rust 1.90
         if: steps.can-publish.outputs.skip == 'false'
@@ -249,16 +202,16 @@ jobs:
 
       - name: cargo publish
         if: steps.can-publish.outputs.skip == 'false'
-        run: cargo publish -p tonin-helm
+        run: cargo publish
 
       - name: Skip notice
         if: steps.can-publish.outputs.skip == 'true'
         run: |
-          echo "::notice::crates.io publish skipped — tonin-plugin path dep still present."
-          echo "::notice::Publish manually once tonin-plugin >= 0.5.2 is on crates.io."
+          echo "::notice::crates.io publish skipped — tonin-plugin git dep still present."
+          echo "::notice::Replace with tonin-plugin = \"0.5.2\" once it is on crates.io."
 
   # -------------------------------------------------------------------------
-  # Flip draft Release to published once binaries and publish both succeed.
+  # Flip draft Release to published.
   # -------------------------------------------------------------------------
   finalize-release:
     name: Finalize GitHub Release
