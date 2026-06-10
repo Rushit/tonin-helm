@@ -18,6 +18,29 @@ spec:
         {{- include "service.selectorLabels" . | nindent 8 }}
         service.identity: {{ include "service.name" . }}.{{ .Release.Namespace }}
     spec:
+      {{- if .Values.migrations.enabled }}
+      # DB migrations run to completion before the server starts.
+      initContainers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            {{- range .Values.migrations.command }}
+            - {{ . | quote }}
+            {{- end }}
+          env:
+            {{- range $k, $v := .Values.statefulEnv }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- range .Values.secrets.keys }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "service.name" $ }}-secrets
+                  key: {{ . }}
+            {{- end }}
+      {{- end }}
       containers:
         - name: server
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -32,6 +55,17 @@ spec:
               value: "service.namespace={{ .Release.Namespace }},service.version={{ .Values.image.tag }}"
             - name: RUST_LOG
               value: "info"
+            {{- range $k, $v := .Values.statefulEnv }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- range .Values.secrets.keys }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "service.name" $ }}-secrets
+                  key: {{ . }}
+            {{- end }}
             {{- range $k, $v := .Values.env }}
             - name: {{ $k }}
               value: {{ $v | quote }}

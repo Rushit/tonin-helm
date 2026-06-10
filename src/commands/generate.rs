@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use include_dir::{include_dir, Dir};
 use tera::Tera;
-use tonin_plugin::Plan;
+use tonin_plugin::{MigrationRunOn, Plan, ServiceKind};
 
 static TEMPLATES: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates");
 
@@ -88,15 +88,89 @@ fn build_context(plan: &Plan) -> tera::Context {
     ctx.insert("memory", &plan.memory);
     ctx.insert("namespace", &plan.namespace);
     ctx.insert("mesh", plan.mesh.as_str());
+    ctx.insert("is_cilium", &(plan.mesh.as_str() == "cilium"));
     ctx.insert("expose", &plan.expose);
-    ctx.insert("has_database", &plan.database.is_some());
-    ctx.insert("has_cache", &plan.cache.is_some());
-    if let Some(db) = &plan.database {
-        ctx.insert("database_engine", db.engine.as_str());
+
+    let is_web = matches!(plan.kind, ServiceKind::Web);
+    ctx.insert("is_web", &is_web);
+    ctx.insert("grpc_port", &(if is_web { 3000_u32 } else { 50051 }));
+
+    // ---- Database. Always insert every key (with defaults) so the Tera
+    //      templates never hit an undefined variable when [database] is absent.
+    let db_enabled = plan
+        .database
+        .as_ref()
+        .is_some_and(|d| d.engine.as_str() != "none");
+    ctx.insert("db_enabled", &db_enabled);
+    match &plan.database {
+        Some(db) => {
+            ctx.insert("db_engine", db.engine.as_str());
+            ctx.insert("db_shared", &db.shared);
+            ctx.insert("db_name", &db.name);
+            ctx.insert("db_namespace", &db.namespace);
+            ctx.insert("db_port", &db.port());
+            ctx.insert("db_image", &db.image());
+            ctx.insert("db_size", &db.size);
+        }
+        None => {
+            ctx.insert("db_engine", "none");
+            ctx.insert("db_shared", &false);
+            ctx.insert("db_name", "");
+            ctx.insert("db_namespace", "");
+            ctx.insert("db_port", &5432_u32);
+            ctx.insert("db_image", "");
+            ctx.insert("db_size", "2Gi");
+        }
     }
-    if let Some(cache) = &plan.cache {
-        ctx.insert("cache_engine", cache.engine.as_str());
+
+    // ---- Cache. Same always-insert discipline.
+    let cache_enabled = plan
+        .cache
+        .as_ref()
+        .is_some_and(|c| c.engine.as_str() != "none");
+    ctx.insert("cache_enabled", &cache_enabled);
+    match &plan.cache {
+        Some(c) => {
+            ctx.insert("cache_engine", c.engine.as_str());
+            ctx.insert("cache_shared", &c.shared);
+            ctx.insert("cache_name", &c.name);
+            ctx.insert("cache_namespace", &c.namespace);
+            ctx.insert("cache_port", &c.port());
+            ctx.insert("cache_size", &c.size);
+        }
+        None => {
+            ctx.insert("cache_engine", "none");
+            ctx.insert("cache_shared", &false);
+            ctx.insert("cache_name", "");
+            ctx.insert("cache_namespace", "");
+            ctx.insert("cache_port", &6379_u32);
+            ctx.insert("cache_size", "1Gi");
+        }
     }
+
+    // ---- Stateful env + secret keys. `emitted_env` already resolves
+    //      DATABASE_URL / REDIS_URL (literals) and the from-secret key list
+    //      (DATABASE_PASSWORD + declared [secrets].required) for this env.
+    ctx.insert("stateful_env_literals", &plan.emitted_env.literals);
+    ctx.insert("secret_keys", &plan.emitted_env.from_secret);
+
+    // ---- Migrations init-container.
+    let migrations_init = plan
+        .migrations
+        .as_ref()
+        .is_some_and(|m| matches!(m.run_on, MigrationRunOn::InitContainer));
+    ctx.insert("migrations_init", &migrations_init);
+    let migrations_command: Vec<String> = plan
+        .migrations
+        .as_ref()
+        .map(|m| m.command.clone())
+        .unwrap_or_default();
+    ctx.insert("migrations_command", &migrations_command);
+
+    // ---- CiliumNetworkPolicy allowlist (callers) + egress (depends_on).
+    ctx.insert("callers", &plan.callers);
+    ctx.insert("depends_on", &plan.depends_on);
+
     ctx.insert("env_name", &plan.selected_env);
     ctx
 }
@@ -159,4 +233,189 @@ pub fn resolve_service_dir(explicit: Option<&Path>) -> Result<PathBuf> {
         return Ok(PathBuf::from(dir));
     }
     std::env::current_dir().context("cannot determine current directory")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A `tonin.toml` exercising every stateful surface: owned DB + cache in
+    /// prod, a shared DB in dev, app secrets, callers (with a dev overlay),
+    /// migrations, and the cilium mesh.
+    const RICH_TOML: &str = r#"
+schema = "v1"
+
+[service]
+name    = "identity"
+version = "1.2.3"
+
+[deploy]
+replicas    = 2
+mesh        = "cilium"
+namespace   = "agnitiv"
+mcp_sidecar = true
+
+[deploy.dev]
+replicas  = 1
+namespace = "agnitiv-dev"
+
+[resources]
+cpu    = "100m"
+memory = "128Mi"
+
+[database]
+engine = "postgres"
+
+[database.dev]
+shared = true
+url    = "postgresql://u:p@postgres.shared-dev.svc.cluster.local:5432/identity_dev"
+
+[cache]
+engine = "redis"
+
+[cache.dev]
+shared = true
+url    = "redis://redis.shared-dev.svc.cluster.local:6379"
+
+[secrets]
+required = ["JWT_SIGNING_KEY"]
+
+[migrations]
+tool   = "sqlx"
+dir    = "migrations/"
+run_on = "init-container"
+
+[callers]
+gateway = "agnitiv"
+
+[callers.dev]
+gateway = "agnitiv-dev"
+"#;
+
+    fn write_service(dir: &Path, toml: &str) {
+        std::fs::write(dir.join("tonin.toml"), toml).unwrap();
+    }
+
+    fn read(p: &Path) -> String {
+        std::fs::read_to_string(p).unwrap()
+    }
+
+    #[test]
+    fn generates_full_chart_tree() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(svc.path(), RICH_TOML);
+        let out = svc.path().join("chart");
+
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["dev".into(), "prod".into()],
+        })
+        .unwrap();
+
+        // Static Go templates for every resource are copied in.
+        for f in [
+            "deployment.yaml",
+            "service.yaml",
+            "hpa.yaml",
+            "db-statefulset.yaml",
+            "db-service.yaml",
+            "cache-statefulset.yaml",
+            "cache-service.yaml",
+            "secret.yaml",
+            "networkpolicy.yaml",
+        ] {
+            assert!(
+                out.join("templates").join(f).exists(),
+                "missing template {f}"
+            );
+        }
+        assert!(out.join("values.yaml").exists());
+        assert!(out.join("values-dev.yaml").exists());
+        assert!(out.join("values-prod.yaml").exists());
+    }
+
+    #[test]
+    fn prod_values_own_the_database_and_carry_db_password_secret() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(svc.path(), RICH_TOML);
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        let prod = read(&out.join("values-prod.yaml"));
+        // prod has no [database.prod] overlay -> owned (shared:false).
+        assert!(prod.contains("shared: false"), "prod db should be owned");
+        assert!(prod.contains("name: \"identity-db\""));
+        // Owned DB means DATABASE_PASSWORD is a required secret key.
+        assert!(prod.contains("DATABASE_PASSWORD"));
+        assert!(prod.contains("JWT_SIGNING_KEY"));
+        // Cilium policy allowlist resolves the base caller namespace.
+        assert!(prod.contains("name: gateway"));
+        assert!(prod.contains("namespace: agnitiv"));
+    }
+
+    #[test]
+    fn dev_values_use_shared_instances_without_db_password() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(svc.path(), RICH_TOML);
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["dev".into()],
+        })
+        .unwrap();
+
+        let dev = read(&out.join("values-dev.yaml"));
+        assert!(dev.contains("shared: true"), "dev db should be shared");
+        // Shared DB (url override) emits no DATABASE_PASSWORD secret key.
+        assert!(
+            !dev.contains("DATABASE_PASSWORD"),
+            "shared dev db must not require DATABASE_PASSWORD"
+        );
+        // The shared URL is injected verbatim as stateful env.
+        assert!(dev.contains("postgres.shared-dev.svc.cluster.local"));
+        // Caller dev overlay applies.
+        assert!(dev.contains("namespace: agnitiv-dev"));
+    }
+
+    #[test]
+    fn service_without_stateful_deps_disables_blocks() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(
+            svc.path(),
+            r#"
+schema = "v1"
+[service]
+name    = "greeter"
+version = "0.1.0"
+[deploy]
+replicas  = 1
+mesh      = "none"
+namespace = "demo"
+[resources]
+cpu    = "50m"
+memory = "64Mi"
+"#,
+        );
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        let values = read(&out.join("values.yaml"));
+        assert!(values.contains("enabled: false")); // database/cache off
+        assert!(values.contains("statefulEnv: {}"));
+        assert!(values.contains("keys: []"));
+        // mesh=none -> no cilium policy.
+        assert!(values.contains("networkPolicy:\n  enabled: false"));
+    }
 }

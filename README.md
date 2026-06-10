@@ -94,11 +94,26 @@ chart/
   values-staging.yaml     # staging overlay
   values-prod.yaml        # prod overlay
   templates/
-    deployment.yaml       # standard Deployment
+    deployment.yaml       # Deployment (+ migrations initContainer, stateful env)
     service.yaml          # ClusterIP Service
-    hpa.yaml              # HorizontalPodAutoscaler
+    hpa.yaml              # HorizontalPodAutoscaler (if autoscaling)
     ingress.yaml          # Ingress (if expose is set)
+    db-statefulset.yaml   # owned database StatefulSet (if [database], not shared)
+    db-service.yaml       # headless DB Service
+    cache-statefulset.yaml # owned cache StatefulSet (if [cache], not shared)
+    cache-service.yaml    # headless cache Service
+    secret.yaml           # Secret for DB password + app secrets (values-driven)
+    networkpolicy.yaml    # CiliumNetworkPolicy (if mesh = cilium)
 ```
+
+Each template is gated on `.Values`, so a service with no `[database]`, `[cache]`,
+`[secrets]`, or mesh renders only the core Deployment/Service/HPA. `shared = true`
+database/cache point at an external instance and render **no** StatefulSet.
+
+Secrets are values-driven: the chart templates a `<release>-secrets` Secret from
+`secrets.values` — supply real values at deploy time
+(`--set secrets.values.DATABASE_PASSWORD=…` or a private values file; never commit
+them). Set `secrets.create=false` to reference an externally-managed Secret instead.
 
 Re-run `tonin helm generate` after editing `tonin.toml` — don't hand-edit the generated files.
 
@@ -140,8 +155,11 @@ chart values:
 | `[deploy].mesh` | mesh annotations in values |
 | `[deploy].expose` | Ingress host in values |
 | `[resources].cpu` / `memory` | resource requests/limits |
-| `[database]` / `[cache]` | values flags for StatefulSet deps |
-| Per-env `[deploy.<env>]` overlays | `values-<env>.yaml` overrides |
+| `[database]` / `[cache]` | StatefulSet + headless Service (owned) or `DATABASE_URL`/`REDIS_URL` stateful env (shared) |
+| `[secrets].required` | `secrets.keys` → secret-sourced env + `<release>-secrets` Secret |
+| `[migrations]` (`run_on = "init-container"`) | migrations initContainer on the Deployment |
+| `[callers]` + `mesh = "cilium"` | CiliumNetworkPolicy ingress allowlist + egress |
+| Per-env `[deploy.<env>]` / `[database.<env>]` / … overlays | `values-<env>.yaml` overrides |
 
 ---
 

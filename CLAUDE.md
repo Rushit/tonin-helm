@@ -71,8 +71,15 @@ Two categories, both embedded via `include_dir`:
 
 - **Tera templates** (`*.tmpl`) — `Chart.yaml.tmpl`, `values.yaml.tmpl`,
   `values-env.yaml.tmpl`. Rendered with a context built from the resolved `Plan`.
-- **Static Go templates** (`chart-templates/`) — `deployment.yaml`, `service.yaml`,
-  `hpa.yaml`, `ingress.yaml`. Copied verbatim to `chart/templates/`; not processed by
+- **Static Go templates** (`chart-templates/`) — `deployment.yaml` (with a
+  migrations initContainer + stateful/secret env injection), `service.yaml`,
+  `hpa.yaml`, `ingress.yaml`, `db-statefulset.yaml`, `db-service.yaml`,
+  `cache-statefulset.yaml`, `cache-service.yaml`, `secret.yaml`, and
+  `networkpolicy.yaml` (CiliumNetworkPolicy). Each is gated on `.Values` so
+  absent capabilities render nothing; `shared` DB/cache render no StatefulSet.
+  Mesh policy is **Cilium only** today (Istio/Linkerd are a known follow-up to
+  reach full `tonin k8s generate` parity). Copied verbatim to `chart/templates/`;
+  not processed by
   Tera (they contain `{{ }}` Go template syntax that would conflict).
 
 ### Dependency on tonin-plugin

@@ -10,7 +10,7 @@ image:
 
 service:
   type: ClusterIP
-  grpcPort: 50051
+  grpcPort: {{ grpc_port }}
   mcpPort: 50052
 
 mcpSidecar: {{ mcp_sidecar }}
@@ -40,12 +40,68 @@ observability:
 # Extra env vars injected verbatim into the container.
 env: {}
 
-# Stateful dependencies — populated by tonin helm generate when tonin.toml
-# declares [database] or [cache] blocks.
+# Resolved stateful env (DATABASE_URL, REDIS_URL, …) injected verbatim.
+# Populated from tonin.toml [database]/[cache]; overridden per-env.
+statefulEnv:{% if stateful_env_literals | length == 0 %} {}{% endif %}
+{%- for kv in stateful_env_literals %}
+  {{ kv.0 }}: "{{ kv.1 }}"
+{%- endfor %}
+
+# Stateful dependencies — rendered when tonin.toml declares [database]/[cache].
+# `shared: true` points at an external instance and renders NO StatefulSet.
 database:
-  enabled: {% if has_database %}true{% else %}false{% endif %}
-  engine: "{{ database_engine | default(value="none") }}"
+  enabled: {{ db_enabled }}
+  shared: {% if db_shared %}true{% else %}false{% endif %}
+  engine: "{{ db_engine }}"
+  name: "{{ db_name }}"
+  namespace: "{{ db_namespace }}"
+  port: {{ db_port }}
+  image: "{{ db_image }}"
+  storage: "{{ db_size }}"
 
 cache:
-  enabled: {% if has_cache %}true{% else %}false{% endif %}
-  engine: "{{ cache_engine | default(value="none") }}"
+  enabled: {{ cache_enabled }}
+  shared: {% if cache_shared %}true{% else %}false{% endif %}
+  engine: "{{ cache_engine }}"
+  name: "{{ cache_name }}"
+  namespace: "{{ cache_namespace }}"
+  port: {{ cache_port }}
+  storage: "{{ cache_size }}"
+
+# Secrets the service requires (DATABASE_PASSWORD, JWT keys, …).
+# create=true templates a Secret from `values` — supply real values at deploy
+# time (`--set secrets.values.KEY=...` or a private values file); NEVER commit
+# them. create=false references an externally-managed Secret named
+# <release>-secrets (e.g. created by ExternalSecrets / Vault / kubectl).
+secrets:
+  create: true
+  keys:{% if secret_keys | length == 0 %} []{% endif %}
+{%- for key in secret_keys %}
+    - {{ key }}
+{%- endfor %}
+  values: {}
+
+# DB migrations — when run_on=init-container an initContainer runs the command
+# before the server container starts.
+migrations:
+  enabled: {% if migrations_init %}true{% else %}false{% endif %}
+  command:{% if migrations_command | length == 0 %} []{% endif %}
+{%- for c in migrations_command %}
+    - "{{ c }}"
+{%- endfor %}
+
+# CiliumNetworkPolicy ingress allowlist + egress. Rendered only when mesh=cilium.
+networkPolicy:
+  enabled: {% if is_cilium %}true{% else %}false{% endif %}
+  port: {{ grpc_port }}
+  mcpSidecar: {{ mcp_sidecar }}
+  callers:{% if callers | length == 0 %} []{% endif %}
+{%- for c in callers %}
+    - name: {{ c.name }}
+      namespace: {{ c.namespace }}
+{%- endfor %}
+  dependsOn:{% if depends_on | length == 0 %} []{% endif %}
+{%- for d in depends_on %}
+    - name: {{ d.name }}
+      namespace: {{ d.namespace }}
+{%- endfor %}
