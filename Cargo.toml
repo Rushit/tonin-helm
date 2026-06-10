@@ -16,8 +16,10 @@ path = "src/main.rs"
 
 [dependencies]
 # Plan API — reads tonin.toml and resolves env overlays.
-# Path dep for local development; swap to `version = "0.4"` on crates.io once published.
-tonin-plugin = { path = "../tonin/crates/tonin-plugin" }
+# Use the published crate once tonin-plugin is on crates.io:
+#   tonin-plugin = "0.4"
+# Until then, the path dep points at the local workspace for development.
+tonin-plugin = { version = "0.4", path = "../tonin/crates/tonin-plugin" }
 
 anyhow        = "1"
 clap          = { version = "4", features = ["derive"] }
