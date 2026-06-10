@@ -96,7 +96,12 @@ fi
 echo "Refreshing Cargo.lock via cargo check..."
 cargo check
 
-git add VERSION Cargo.toml Cargo.lock
+# Cargo.lock is gitignored for binary crates — add it only if tracked.
+LOCK_ARG=""
+if git ls-files --error-unmatch Cargo.lock &>/dev/null 2>&1; then
+    LOCK_ARG="Cargo.lock"
+fi
+git add VERSION Cargo.toml $LOCK_ARG
 git commit -m "chore: release v$NEW"
 
 echo
