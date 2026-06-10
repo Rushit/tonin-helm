@@ -1,9 +1,11 @@
 CARGO ?= cargo
 RUSTDOCFLAGS ?= -D warnings
+VERSION ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build check fmt fmt-check lint doc test ci install install-hooks
+.PHONY: help build check fmt fmt-check lint doc test ci install install-hooks \
+        show-version version release publish
 
 help: ## Show this help table
 	@awk 'BEGIN {FS = ":.*##"; printf "Available targets:\n\n"} \
@@ -43,3 +45,33 @@ install-hooks: ## Wire up git hooks (run once after cloning)
 	cp scripts/commit-msg .git/hooks/commit-msg
 	chmod +x .git/hooks/commit-msg
 	@echo "hooks installed: pre-commit, commit-msg"
+
+# ---------------------------------------------------------------------------
+# Versioning + release
+# ---------------------------------------------------------------------------
+
+show-version: ## Print the current version (from /VERSION)
+	@cat VERSION
+
+version: ## Bump VERSION + Cargo.toml and commit (VERSION=X.Y.Z)
+	@test -n "$(VERSION)" || \
+	  (echo "usage: make version VERSION=X.Y.Z" >&2; exit 1)
+	./scripts/bump-version.sh "$(VERSION)"
+
+release: version ## Bump, tag, and push vX.Y.Z to origin (fires release CI)
+	@echo "→ tagging v$(VERSION)"
+	git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
+	@echo "→ pushing main"
+	git push origin main
+	@echo "→ pushing tag v$(VERSION)"
+	git push origin "v$(VERSION)"
+	@echo
+	@echo "✓ v$(VERSION) released. .github/workflows/release.yml is running:"
+	@echo "  https://github.com/Rushit/tonin-helm/actions"
+
+publish: ## Publish tonin-helm to crates.io (requires CARGO_REGISTRY_TOKEN + tonin-plugin on crates.io)
+	@test -n "$${CARGO_REGISTRY_TOKEN}" || \
+	  (echo "CARGO_REGISTRY_TOKEN not set" >&2; exit 1)
+	@grep -q 'tonin-plugin.*path' Cargo.toml && \
+	  (echo "error: remove the path dep on tonin-plugin before publishing" >&2; exit 1) || true
+	$(CARGO) publish

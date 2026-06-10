@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: fmt + clippy + test + doc (${{ matrix.rust }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ["1.90", "stable"]
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+
+    steps:
+      - name: Checkout tonin-helm
+        uses: actions/checkout@v4
+        with:
+          path: tonin-helm
+
+      # tonin-plugin is a path dep pointing to ../tonin/crates/tonin-plugin.
+      # Once tonin-plugin is published to crates.io, remove this step and
+      # the `path` field from Cargo.toml — the version constraint alone suffices.
+      - name: Read tonin-plugin version from Cargo.toml
+        id: plugin
+        run: |
+          ver=$(grep 'tonin-plugin' tonin-helm/Cargo.toml \
+                | grep -oP '(?<=version = ")[^"]+' | head -1)
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tonin at v${{ steps.plugin.outputs.ver }}
+        uses: actions/checkout@v4
+        with:
+          repository: Rushit/tonin
+          ref: v${{ steps.plugin.outputs.ver }}
+          path: tonin
+
+      - name: Install Rust toolchain (${{ matrix.rust }})
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tonin-helm
+          key: ${{ matrix.rust }}
+
+      - name: cargo fmt --check
+        working-directory: tonin-helm
+        run: make fmt-check
+
+      - name: cargo clippy
+        working-directory: tonin-helm
+        run: make lint
+
+      - name: cargo test
+        working-directory: tonin-helm
+        run: make test
+
+      - name: cargo doc
+        working-directory: tonin-helm
+        run: make doc
