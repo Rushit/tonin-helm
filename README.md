@@ -125,7 +125,7 @@ chart values:
 
 | tonin-helm | tonin-plugin | tonin CLI |
 |------------|--------------|-----------|
-| 0.1.x      | 0.5.2+       | 0.5.2+    |
+| 0.1.x      | 0.5.3+       | 0.5.3+    |
 
 `tonin-helm` follows `tonin-plugin`'s semver independently. A `tonin-helm` patch bump
 never requires a `tonin` CLI upgrade.
