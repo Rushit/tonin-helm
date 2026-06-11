@@ -22,8 +22,9 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      {{- if .Values.migrations.enabled }}
-      # DB migrations run to completion before the server starts.
+      {{- if and .Values.migrations.enabled (eq .Values.migrations.mode "init-container") }}
+      # DB migrations run to completion before the server starts. For the
+      # pre-upgrade Job alternative, set migrations.mode=job (see migration-job.yaml).
       initContainers:
         - name: migrate
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -43,6 +44,10 @@ spec:
                 secretKeyRef:
                   name: {{ include "service.name" $ }}-secrets
                   key: {{ . }}
+            {{- end }}
+            {{- range $k, $v := .Values.migrations.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}

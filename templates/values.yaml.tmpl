@@ -97,14 +97,23 @@ secrets:
 {%- endfor %}
   values: {}
 
-# DB migrations — when run_on=init-container an initContainer runs the command
-# before the server container starts.
+# DB migrations.
+#   mode: init-container  → runs before the server container in every pod
+#         (default; correct for an owned/in-chart DB and for dev).
+#   mode: job             → a pre-install/pre-upgrade hook Job that Helm gates
+#         the rollout on. Needs the DB + Secret to already exist (managed/shared
+#         DB + secrets.create=false), since pre-upgrade hooks run before the
+#         chart's own StatefulSet/Secret.
+#   env: extra env for the migration step only (e.g. IDENTITY_MIGRATE_ONLY=1) —
+#         never reaches the server container.
 migrations:
-  enabled: {% if migrations_init %}true{% else %}false{% endif %}
+  enabled: {% if migrations_enabled %}true{% else %}false{% endif %}
+  mode: init-container
   command:{% if migrations_command | length == 0 %} []{% endif %}
 {%- for c in migrations_command %}
     - "{{ c }}"
 {%- endfor %}
+  env: {}
 
 # CiliumNetworkPolicy ingress allowlist + egress. Rendered only when mesh=cilium.
 networkPolicy:

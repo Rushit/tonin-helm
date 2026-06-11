@@ -162,12 +162,15 @@ fn build_context(plan: &Plan) -> tera::Context {
     ctx.insert("stateful_env_literals", &plan.emitted_env.literals);
     ctx.insert("secret_keys", &plan.emitted_env.from_secret);
 
-    // ---- Migrations init-container.
-    let migrations_init = plan
+    // ---- Migrations. `enabled` when tonin.toml asks for a managed migration
+    //      step (run_on = init-container). The chart renders either an
+    //      initContainer (default, dev / owned DB) or a pre-upgrade hook Job
+    //      (prod / managed DB) selected by `migrations.mode` at deploy time.
+    let migrations_enabled = plan
         .migrations
         .as_ref()
         .is_some_and(|m| matches!(m.run_on, MigrationRunOn::InitContainer));
-    ctx.insert("migrations_init", &migrations_init);
+    ctx.insert("migrations_enabled", &migrations_enabled);
     let migrations_command: Vec<String> = plan
         .migrations
         .as_ref()
@@ -390,6 +393,30 @@ gateway = "agnitiv-dev"
         assert!(dev.contains("postgres.shared-dev.svc.cluster.local"));
         // Caller dev overlay applies.
         assert!(dev.contains("namespace: agnitiv-dev"));
+    }
+
+    #[test]
+    fn migrations_default_to_init_container_mode_and_ship_job_template() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(svc.path(), RICH_TOML);
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        let values = read(&out.join("values.yaml"));
+        assert!(values.contains("enabled: true")); // [migrations] present
+        assert!(values.contains("mode: init-container")); // default mode
+        assert!(values.contains("env: {}")); // migration-only env hatch
+                                             // Both the initContainer (deployment) and the Job hook template ship;
+                                             // mode selects which renders at deploy time.
+        assert!(out.join("templates").join("migration-job.yaml").exists());
+        let job = read(&out.join("templates").join("migration-job.yaml"));
+        assert!(job.contains("helm.sh/hook\": pre-install,pre-upgrade"));
+        assert!(job.contains(r#"eq .Values.migrations.mode "job""#));
     }
 
     #[test]

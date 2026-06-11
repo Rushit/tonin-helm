@@ -104,8 +104,24 @@ chart/
     cache-service.yaml    # headless cache Service
     secret.yaml           # Secret for DB password + app secrets (values-driven)
     networkpolicy.yaml    # CiliumNetworkPolicy (if mesh = cilium)
+    migration-job.yaml    # pre-upgrade hook Job (if migrations.mode = job)
     extra-manifests.yaml  # deploy-time .Values.extraManifests (escape hatch)
 ```
+
+### Migrations: init-container vs. Job
+
+`migrations.mode` selects how a declared `[migrations]` step runs:
+
+| `migrations.mode` | What renders | Use when |
+|---|---|---|
+| `init-container` (default) | an initContainer on the Deployment — migrates in every pod before the server starts | owned/in-chart DB, and **dev** |
+| `job` | a `pre-install`/`pre-upgrade` **hook Job** Helm gates the rollout on (migrate → success → roll out; `--atomic` rolls back on failure) | **prod** with a **managed/shared** DB |
+
+`mode: job` requires the DB **and** the Secret to already exist, because pre-upgrade
+hooks run before the chart's own StatefulSet/Secret — so pair it with
+`database.shared=true` (managed DB) and `secrets.create=false` (externally-managed
+Secret: Sealed Secrets / ExternalSecrets / kubectl). `migrations.env` (e.g.
+`IDENTITY_MIGRATE_ONLY=1`) lands on the migration step **only**, never the server.
 
 Each template is gated on `.Values`, so a service with no `[database]`, `[cache]`,
 `[secrets]`, or mesh renders only the core Deployment/Service/HPA. `shared = true`

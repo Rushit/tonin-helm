@@ -82,6 +82,11 @@ Two categories, both embedded via `include_dir`:
   `extraEnv` + `extraManifests` (deploy-time, default `[]` so regeneration never
   clobbers them). Durable per-service manifests go in a custom `chart/templates/`
   file, which `generate` does not overwrite.
+  Migrations render in one of two modes via `migrations.mode`: `init-container`
+  (default — initContainer per pod; dev/owned-DB) or `job` (`pre-install`/
+  `pre-upgrade` hook Job that gates the rollout; prod/managed-DB, needs
+  `database.shared=true` + `secrets.create=false`). `migrations.env` lands on the
+  migration step only.
   Mesh policy is **Cilium only** today (Istio/Linkerd are a known follow-up to
   reach full `tonin k8s generate` parity). Copied verbatim to `chart/templates/`;
   not processed by

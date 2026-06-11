@@ -47,11 +47,13 @@ secrets:
 {%- endfor %}
 
 migrations:
-  enabled: {% if migrations_init %}true{% else %}false{% endif %}
+  enabled: {% if migrations_enabled %}true{% else %}false{% endif %}
+  mode: init-container
   command:{% if migrations_command | length == 0 %} []{% endif %}
 {%- for c in migrations_command %}
     - "{{ c }}"
 {%- endfor %}
+  env: {}
 
 networkPolicy:
   enabled: {% if is_cilium %}true{% else %}false{% endif %}
