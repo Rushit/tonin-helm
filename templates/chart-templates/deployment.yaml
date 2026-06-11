@@ -34,16 +34,18 @@ spec:
             - {{ . | quote }}
             {{- end }}
           env:
-            {{- range $k, $v := .Values.statefulEnv }}
-            - name: {{ $k }}
-              value: {{ $v | quote }}
-            {{- end }}
+            # Secret-sourced vars first so k8s can expand $(DATABASE_PASSWORD)
+            # inside the DATABASE_URL literal that follows.
             {{- range .Values.secrets.keys }}
             - name: {{ . }}
               valueFrom:
                 secretKeyRef:
                   name: {{ include "service.name" $ }}-secrets
                   key: {{ . }}
+            {{- end }}
+            {{- range $k, $v := .Values.statefulEnv }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
             {{- end }}
             {{- range $k, $v := .Values.migrations.env }}
             - name: {{ $k }}
@@ -67,16 +69,18 @@ spec:
               value: "service.namespace={{ .Release.Namespace }},service.version={{ .Values.image.tag }}"
             - name: RUST_LOG
               value: "info"
-            {{- range $k, $v := .Values.statefulEnv }}
-            - name: {{ $k }}
-              value: {{ $v | quote }}
-            {{- end }}
+            # Secret-sourced vars first so k8s can expand $(DATABASE_PASSWORD)
+            # inside the DATABASE_URL literal that follows.
             {{- range .Values.secrets.keys }}
             - name: {{ . }}
               valueFrom:
                 secretKeyRef:
                   name: {{ include "service.name" $ }}-secrets
                   key: {{ . }}
+            {{- end }}
+            {{- range $k, $v := .Values.statefulEnv }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
             {{- end }}
             {{- range $k, $v := .Values.env }}
             - name: {{ $k }}

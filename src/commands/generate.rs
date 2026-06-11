@@ -420,6 +420,35 @@ gateway = "agnitiv-dev"
     }
 
     #[test]
+    fn names_resources_by_chart_not_release_and_orders_secret_env_first() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(svc.path(), RICH_TOML);
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        // service.name resolves to the chart name (fixed service identity), not
+        // the deploy-time release name — so binary paths + mesh labels are stable.
+        let helpers = read(&out.join("templates").join("_helpers.tpl"));
+        assert!(helpers.contains(".Chart.Name"));
+        assert!(!helpers.contains(".Release.Name"));
+
+        // Secret-sourced env (DATABASE_PASSWORD) must precede the statefulEnv
+        // literals (DATABASE_URL) so k8s can expand $(DATABASE_PASSWORD).
+        let deployment = read(&out.join("templates").join("deployment.yaml"));
+        let secrets_at = deployment.find(".Values.secrets.keys").unwrap();
+        let stateful_at = deployment.find(".Values.statefulEnv").unwrap();
+        assert!(
+            secrets_at < stateful_at,
+            "secrets.keys must be rendered before statefulEnv"
+        );
+    }
+
+    #[test]
     fn mcp_defaults_to_in_process_mode() {
         let svc = tempfile::tempdir().unwrap();
         write_service(svc.path(), RICH_TOML);

@@ -1,8 +1,12 @@
 {{/*
-Expand the name of the release (used as the k8s resource name).
+The service name — the chart name (baked from tonin.toml [service].name at
+generate time), NOT the Helm release name. Used for resource names, the binary
+path (/usr/local/bin/<name>), and the `service.identity: <name>.<ns>` mesh label
+that callers' NetworkPolicies match — all fixed properties of the service,
+independent of how the release happens to be named.
 */}}
 {{- define "service.name" -}}
-{{- .Release.Name }}
+{{- .Chart.Name }}
 {{- end }}
 
 {{/*
