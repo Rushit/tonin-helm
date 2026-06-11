@@ -91,6 +91,14 @@ fn build_context(plan: &Plan) -> tera::Context {
     ctx.insert("is_cilium", &(plan.mesh.as_str() == "cilium"));
     ctx.insert("expose", &plan.expose);
 
+    // Mesh-derived pod annotations. Generated (not hand-edited) so they survive
+    // `tonin helm generate`. Cilium gets transparent (WireGuard) encryption.
+    let mut pod_annotations: Vec<(String, String)> = Vec::new();
+    if plan.mesh.as_str() == "cilium" {
+        pod_annotations.push(("io.cilium/encryption".into(), "enabled".into()));
+    }
+    ctx.insert("pod_annotations", &pod_annotations);
+
     let is_web = matches!(plan.kind, ServiceKind::Web);
     ctx.insert("is_web", &is_web);
     ctx.insert("grpc_port", &(if is_web { 3000_u32 } else { 50051 }));
@@ -382,6 +390,59 @@ gateway = "agnitiv-dev"
         assert!(dev.contains("postgres.shared-dev.svc.cluster.local"));
         // Caller dev overlay applies.
         assert!(dev.contains("namespace: agnitiv-dev"));
+    }
+
+    #[test]
+    fn cilium_mesh_emits_pod_annotations_and_escape_hatches() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(svc.path(), RICH_TOML);
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        let values = read(&out.join("values.yaml"));
+        // Cilium transparent encryption is generated, not hand-edited.
+        assert!(values.contains("io.cilium/encryption"));
+        // Escape hatches default empty so regeneration never clobbers them.
+        assert!(values.contains("extraEnv: []"));
+        assert!(values.contains("extraManifests: []"));
+        // The deploy-time extraManifests template ships in the chart.
+        assert!(out.join("templates").join("extra-manifests.yaml").exists());
+    }
+
+    #[test]
+    fn non_cilium_mesh_has_empty_pod_annotations() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(
+            svc.path(),
+            r#"
+schema = "v1"
+[service]
+name    = "greeter"
+version = "0.1.0"
+[deploy]
+replicas  = 1
+mesh      = "istio"
+namespace = "demo"
+[resources]
+cpu    = "50m"
+memory = "64Mi"
+"#,
+        );
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+        let values = read(&out.join("values.yaml"));
+        assert!(values.contains("podAnnotations: {}"));
+        assert!(!values.contains("io.cilium/encryption"));
     }
 
     #[test]

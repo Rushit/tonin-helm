@@ -75,8 +75,13 @@ Two categories, both embedded via `include_dir`:
   migrations initContainer + stateful/secret env injection), `service.yaml`,
   `hpa.yaml`, `ingress.yaml`, `db-statefulset.yaml`, `db-service.yaml`,
   `cache-statefulset.yaml`, `cache-service.yaml`, `secret.yaml`, and
-  `networkpolicy.yaml` (CiliumNetworkPolicy). Each is gated on `.Values` so
+  `networkpolicy.yaml` (CiliumNetworkPolicy), and `extra-manifests.yaml`
+  (deploy-time `.Values.extraManifests`). Each is gated on `.Values` so
   absent capabilities render nothing; `shared` DB/cache render no StatefulSet.
+  Escape hatches: `podAnnotations` (generated from mesh — cilium encryption),
+  `extraEnv` + `extraManifests` (deploy-time, default `[]` so regeneration never
+  clobbers them). Durable per-service manifests go in a custom `chart/templates/`
+  file, which `generate` does not overwrite.
   Mesh policy is **Cilium only** today (Istio/Linkerd are a known follow-up to
   reach full `tonin k8s generate` parity). Copied verbatim to `chart/templates/`;
   not processed by

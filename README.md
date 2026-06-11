@@ -104,6 +104,7 @@ chart/
     cache-service.yaml    # headless cache Service
     secret.yaml           # Secret for DB password + app secrets (values-driven)
     networkpolicy.yaml    # CiliumNetworkPolicy (if mesh = cilium)
+    extra-manifests.yaml  # deploy-time .Values.extraManifests (escape hatch)
 ```
 
 Each template is gated on `.Values`, so a service with no `[database]`, `[cache]`,
@@ -114,6 +115,21 @@ Secrets are values-driven: the chart templates a `<release>-secrets` Secret from
 `secrets.values` — supply real values at deploy time
 (`--set secrets.values.DATABASE_PASSWORD=…` or a private values file; never commit
 them). Set `secrets.create=false` to reference an externally-managed Secret instead.
+
+### Escape hatches
+
+`tonin helm generate` **regenerates `values.yaml`**, so don't hand-edit it. For
+anything the generator doesn't model:
+
+| Need | How |
+|------|-----|
+| Mesh pod annotations (e.g. cilium encryption) | generated into `podAnnotations` from `[deploy].mesh` |
+| Extra env vars (server + initContainer) | deploy time: `--set-json 'extraEnv=[{"name":"X","value":"y"}]'` |
+| Ad-hoc manifests (ConfigMap, etc.) | deploy time: `-f extra.yaml` populating `extraManifests` (each entry a YAML string, run through `tpl`) |
+| **Durable** per-service manifest (e.g. a CronJob) | add a custom file under `chart/templates/` — generate only overwrites its own templates, so yours **survives regeneration** |
+
+`extraEnv` / `extraManifests` default to `[]` precisely so regeneration never
+clobbers them — they're meant to be supplied at deploy, not stored in the chart.
 
 Re-run `tonin helm generate` after editing `tonin.toml` — don't hand-edit the generated files.
 

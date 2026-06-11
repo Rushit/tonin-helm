@@ -17,6 +17,10 @@ spec:
       labels:
         {{- include "service.selectorLabels" . | nindent 8 }}
         service.identity: {{ include "service.name" . }}.{{ .Release.Namespace }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       {{- if .Values.migrations.enabled }}
       # DB migrations run to completion before the server starts.
@@ -39,6 +43,9 @@ spec:
                 secretKeyRef:
                   name: {{ include "service.name" $ }}-secrets
                   key: {{ . }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
       {{- end }}
       containers:
@@ -69,6 +76,9 @@ spec:
             {{- range $k, $v := .Values.env }}
             - name: {{ $k }}
               value: {{ $v | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           ports:
             - containerPort: {{ .Values.service.grpcPort }}
