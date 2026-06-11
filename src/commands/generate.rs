@@ -420,6 +420,26 @@ gateway = "agnitiv-dev"
     }
 
     #[test]
+    fn mcp_defaults_to_in_process_mode() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(svc.path(), RICH_TOML);
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+        let values = read(&out.join("values.yaml"));
+        // RICH_TOML enables mcp_sidecar; the chart defaults to in-process (same
+        // binary, two ports) — not a separate <name>-mcp sidecar container.
+        assert!(values.contains("mode: in-process"));
+        let deployment = read(&out.join("templates").join("deployment.yaml"));
+        assert!(deployment.contains(r#"eq .Values.mcp.mode "in-process""#));
+        assert!(deployment.contains(r#"eq .Values.mcp.mode "sidecar""#));
+    }
+
+    #[test]
     fn cilium_mesh_emits_pod_annotations_and_escape_hatches() {
         let svc = tempfile::tempdir().unwrap();
         write_service(svc.path(), RICH_TOML);

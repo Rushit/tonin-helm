@@ -123,6 +123,18 @@ hooks run before the chart's own StatefulSet/Secret — so pair it with
 Secret: Sealed Secrets / ExternalSecrets / kubectl). `migrations.env` (e.g.
 `IDENTITY_MIGRATE_ONLY=1`) lands on the migration step **only**, never the server.
 
+### MCP: in-process vs. sidecar
+
+`mcp.mode` selects how the MCP tool surface is served (when `mcp.enabled`):
+
+| `mcp.mode` | What renders | Use when |
+|---|---|---|
+| `in-process` (default) | the **same** server container exposes a second port (`service.mcpPort`); the Service exposes both | the server serves MCP in-process — tonin's `Service::new().mcp_addr(...)` runtime (no separate binary) |
+| `sidecar` | a separate `<name>-mcp` container proxying to the gRPC server | only if your image actually ships a `<name>-mcp` binary |
+
+Default is `in-process` because that matches the tonin `Service` runtime — one
+binary, one container, two ports. `sidecar` is the legacy split-binary shape.
+
 Each template is gated on `.Values`, so a service with no `[database]`, `[cache]`,
 `[secrets]`, or mesh renders only the core Deployment/Service/HPA. `shared = true`
 database/cache point at an external instance and render **no** StatefulSet.

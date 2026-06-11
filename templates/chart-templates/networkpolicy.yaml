@@ -21,7 +21,7 @@ spec:
       toPorts:
         - ports:
             - { port: "{{ $.Values.networkPolicy.port }}", protocol: TCP }
-            {{- if $.Values.networkPolicy.mcpSidecar }}
+            {{- if $.Values.networkPolicy.mcp }}
             - { port: "{{ $.Values.service.mcpPort }}", protocol: TCP }
             {{- end }}
     {{- end }}
@@ -33,7 +33,7 @@ spec:
       toPorts:
         - ports:
             - { port: "{{ .Values.networkPolicy.port }}", protocol: TCP }
-            {{- if .Values.networkPolicy.mcpSidecar }}
+            {{- if .Values.networkPolicy.mcp }}
             - { port: "{{ .Values.service.mcpPort }}", protocol: TCP }
             {{- end }}
   egress:

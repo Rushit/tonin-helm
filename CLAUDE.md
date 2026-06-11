@@ -82,6 +82,10 @@ Two categories, both embedded via `include_dir`:
   `extraEnv` + `extraManifests` (deploy-time, default `[]` so regeneration never
   clobbers them). Durable per-service manifests go in a custom `chart/templates/`
   file, which `generate` does not overwrite.
+  MCP renders in one of two modes via `mcp.mode`: `in-process` (default — the
+  same server container exposes `service.mcpPort`; matches tonin's
+  `Service::new().mcp_addr(...)` runtime, one binary/two ports) or `sidecar` (a
+  separate `<name>-mcp` container, only if the image ships that binary).
   Migrations render in one of two modes via `migrations.mode`: `init-container`
   (default — initContainer per pod; dev/owned-DB) or `job` (`pre-install`/
   `pre-upgrade` hook Job that gates the rollout; prod/managed-DB, needs

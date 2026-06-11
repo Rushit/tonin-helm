@@ -88,9 +88,16 @@ spec:
           ports:
             - containerPort: {{ .Values.service.grpcPort }}
               name: grpc
+            {{- if and .Values.mcp.enabled (eq .Values.mcp.mode "in-process") }}
+            # In-process MCP: the same server process also serves MCP on this port.
+            - containerPort: {{ .Values.service.mcpPort }}
+              name: mcp
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-        {{- if .Values.mcpSidecar }}
+        {{- if and .Values.mcp.enabled (eq .Values.mcp.mode "sidecar") }}
+        # Sidecar MCP: a separate <name>-mcp binary proxying to the gRPC server.
+        # Only valid if the image actually ships that binary.
         - name: mcp
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           command: ["/usr/local/bin/{{ include "service.name" . }}-mcp"]

@@ -13,7 +13,14 @@ service:
   grpcPort: {{ grpc_port }}
   mcpPort: 50052
 
-mcpSidecar: {{ mcp_sidecar }}
+# MCP tool surface.
+#   mode: in-process → the same server process serves MCP on service.mcpPort
+#         (tonin's default — one container, two ports, no separate binary).
+#   mode: sidecar    → a separate <name>-mcp container (only if the image ships
+#         that binary).
+mcp:
+  enabled: {{ mcp_sidecar }}
+  mode: in-process
 
 resources:
   requests:
@@ -119,7 +126,7 @@ migrations:
 networkPolicy:
   enabled: {% if is_cilium %}true{% else %}false{% endif %}
   port: {{ grpc_port }}
-  mcpSidecar: {{ mcp_sidecar }}
+  mcp: {{ mcp_sidecar }}
   callers:{% if callers | length == 0 %} []{% endif %}
 {%- for c in callers %}
     - name: {{ c.name }}
