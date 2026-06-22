@@ -10,8 +10,16 @@ image:
 
 service:
   type: ClusterIP
-  grpcPort: {{ grpc_port }}
+  port: {{ port }}
+  portName: {{ port_name }}
+  # Additional HTTP port for a gRPC backend that also serves HTTP (0 = none).
+  httpPort: {{ http_port }}
   mcpPort: 50052
+  # HTTP health probe (httpGet). Rendered only when enabled.
+  health:
+    enabled: {% if health_enabled %}true{% else %}false{% endif %}
+    path: "{{ health_path }}"
+    port: {{ health_port }}
 
 # MCP tool surface.
 #   mode: in-process → the same server process serves MCP on service.mcpPort
@@ -125,7 +133,7 @@ migrations:
 # CiliumNetworkPolicy ingress allowlist + egress. Rendered only when mesh=cilium.
 networkPolicy:
   enabled: {% if is_cilium %}true{% else %}false{% endif %}
-  port: {{ grpc_port }}
+  port: {{ port }}
   mcp: {{ mcp_sidecar }}
   callers:{% if callers | length == 0 %} []{% endif %}
 {%- for c in callers %}

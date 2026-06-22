@@ -10,9 +10,14 @@ spec:
   selector:
     {{- include "service.selectorLabels" . | nindent 4 }}
   ports:
-    - name: grpc
-      port: {{ .Values.service.grpcPort }}
-      targetPort: {{ .Values.service.grpcPort }}
+    - name: {{ .Values.service.portName }}
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+    {{- if gt (int .Values.service.httpPort) 0 }}
+    - name: http
+      port: {{ .Values.service.httpPort }}
+      targetPort: {{ .Values.service.httpPort }}
+    {{- end }}
     {{- if .Values.mcp.enabled }}
     - name: mcp
       port: {{ .Values.service.mcpPort }}

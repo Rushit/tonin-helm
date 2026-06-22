@@ -90,13 +90,31 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
           ports:
-            - containerPort: {{ .Values.service.grpcPort }}
-              name: grpc
+            - containerPort: {{ .Values.service.port }}
+              name: {{ .Values.service.portName }}
+            {{- if gt (int .Values.service.httpPort) 0 }}
+            - containerPort: {{ .Values.service.httpPort }}
+              name: http
+            {{- end }}
             {{- if and .Values.mcp.enabled (eq .Values.mcp.mode "in-process") }}
             # In-process MCP: the same server process also serves MCP on this port.
             - containerPort: {{ .Values.service.mcpPort }}
               name: mcp
             {{- end }}
+          {{- if .Values.service.health.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.service.health.path }}
+              port: {{ .Values.service.health.port }}
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.service.health.path }}
+              port: {{ .Values.service.health.port }}
+            periodSeconds: 5
+            failureThreshold: 3
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
         {{- if and .Values.mcp.enabled (eq .Values.mcp.mode "sidecar") }}
@@ -107,7 +125,7 @@ spec:
           command: ["/usr/local/bin/{{ include "service.name" . }}-mcp"]
           env:
             - name: GRPC_ENDPOINT
-              value: "http://localhost:{{ .Values.service.grpcPort }}"
+              value: "http://localhost:{{ .Values.service.port }}"
             - name: OTEL_SERVICE_NAME
               value: "{{ include "service.name" . }}-mcp"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
