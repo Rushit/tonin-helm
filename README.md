@@ -205,8 +205,9 @@ chart values:
 | `[database]` / `[cache]` | StatefulSet + headless Service (owned) or `DATABASE_URL`/`REDIS_URL` stateful env (shared) |
 | `[secrets].required` | `secrets.keys` → secret-sourced env + `<release>-secrets` Secret |
 | `[migrations]` (`run_on = "init-container"`) | migrations initContainer on the Deployment |
-| `[callers]` + `mesh = "cilium"` | CiliumNetworkPolicy ingress allowlist + egress |
-| Per-env `[deploy.<env>]` / `[database.<env>]` / … overlays | `values-<env>.yaml` overrides |
+| `[callers]` + `mesh = "cilium"` | CiliumNetworkPolicy ingress allowlist |
+| `[depends_on]` + `mesh = "cilium"` | CiliumNetworkPolicy egress allowlist (namespaces resolved per env via `{env}` / the table form) |
+| Per-env `[deploy.<env>]` / `[database.<env>]` / … overlays, and `{env}` in namespaces | `values-<env>.yaml` overrides |
 
 ---
 
