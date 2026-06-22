@@ -237,9 +237,14 @@ Verify: `helm version`
 | tonin-helm | tonin-plugin | tonin CLI |
 |------------|--------------|-----------|
 | 0.1.x      | 0.5.3+       | 0.5.3+    |
+| 0.2.x      | 0.5.6+       | 0.5.6+    |
 
 `tonin-helm` follows `tonin-plugin`'s semver independently. A `tonin-helm` patch bump
 never requires a `tonin` CLI upgrade.
+
+HTTP service support — `type = "http"` and `[service.http]` (a gRPC service that also
+serves HTTP) — requires `tonin-plugin` and the `tonin` CLI **0.5.6+**, rendered by
+`tonin-helm` **0.2.x**.
 
 ---
 
