@@ -49,7 +49,10 @@ no extra configuration needed.
 
 ## Update
 
-Re-running the install script upgrades to the latest release and skips the download if
+The simplest path is `tonin upgrade`, which upgrades the `tonin` CLI and every installed
+plugin (including `tonin-helm`) together after showing a plan. `tonin-helm` reports its
+version and required CLI via `--tonin-meta`, and warns when dispatched by an out-of-date
+`tonin`. Re-running the install script directly also works and skips the download if
 already up to date.
 
 **Update tonin + tonin-helm to latest:**
