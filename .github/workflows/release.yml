@@ -204,3 +204,34 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
+
+  # -------------------------------------------------------------------------
+  # Smoke-test the installer end to end. tonin-helm has no install.sh of its
+  # own — it's installed via the tonin installer — so this fetches that
+  # script and asserts it installs the tonin-helm version we just tagged.
+  # `--with-tonin-helm` resolves `releases/latest`, which only points at this
+  # tag once the release is published, hence `needs: finalize-release`.
+  # -------------------------------------------------------------------------
+  verify-install:
+    name: Smoke-test install.sh
+    needs: finalize-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install via install.sh and assert tonin-helm version
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            REF="${{ github.event.inputs.version }}"
+          else
+            REF="${{ github.ref_name }}"
+          fi
+          WANT="${REF#v}"
+          DEST="$(mktemp -d)"
+          curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh \
+            | bash -s -- --dir "$DEST" --with-tonin-helm
+          GOT="$("$DEST/tonin-helm" --version | awk '{print $NF}')"
+          echo "install.sh installed tonin-helm ${GOT} (expected ${WANT})"
+          if [ "${GOT}" != "${WANT}" ]; then
+            echo "::error::install.sh installed tonin-helm ${GOT} but the released tag is ${WANT}" >&2
+            exit 1
+          fi
