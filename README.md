@@ -241,6 +241,7 @@ Verify: `helm version`
 |------------|--------------|-----------|
 | 0.1.x      | 0.5.3+       | 0.5.3+    |
 | 0.2.x      | 0.5.6+       | 0.5.6+    |
+| 0.3.x      | 0.6.0+       | 0.6.0+    |
 
 `tonin-helm` follows `tonin-plugin`'s semver independently. A `tonin-helm` patch bump
 never requires a `tonin` CLI upgrade.
@@ -248,6 +249,11 @@ never requires a `tonin` CLI upgrade.
 HTTP service support — `type = "http"` and `[service.http]` (a gRPC service that also
 serves HTTP) — requires `tonin-plugin` and the `tonin` CLI **0.5.6+**, rendered by
 `tonin-helm` **0.2.x**.
+
+Per-environment namespaces and dependencies — `{env}` placeholders and the
+Cargo-style `[depends_on]` table form (per-env override, `envs` whitelist,
+`@inherit`) — require `tonin-plugin` and the `tonin` CLI **0.6.0+**, rendered by
+`tonin-helm` **0.3.x**.
 
 ---
 
