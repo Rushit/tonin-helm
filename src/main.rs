@@ -90,6 +90,10 @@ enum Cmd {
     Uninstall(proxy::SimpleArgs),
 }
 
+/// Minimum tonin CLI this plugin needs. Sourced from `tonin-plugin` so the
+/// compatibility floor tracks the schema the plugin actually compiles against.
+const MIN_TONIN_CLI: &str = tonin_plugin::RECOMMENDED_CLI_MIN;
+
 fn main() -> Result<()> {
     // tonin plugin list --verbose calls this flag to get a one-line description.
     let args: Vec<String> = std::env::args().collect();
@@ -97,6 +101,21 @@ fn main() -> Result<()> {
         println!("Helm chart generation and lifecycle management for tonin services");
         return Ok(());
     }
+
+    // `tonin upgrade` / `tonin doctor` read this JSON to discover the plugin's
+    // version, repo, and the minimum CLI it needs — no per-plugin knowledge in
+    // the CLI. Keep the shape in sync with `plugin::PluginMeta` in the CLI.
+    if args.get(1).map(String::as_str) == Some("--tonin-meta") {
+        println!(
+            r#"{{"name":"helm","version":"{}","min_tonin":"{}","repo":"Rushit/tonin-helm"}}"#,
+            env!("CARGO_PKG_VERSION"),
+            MIN_TONIN_CLI,
+        );
+        return Ok(());
+    }
+
+    // When dispatched by an out-of-date `tonin`, nudge the user to upgrade.
+    warn_if_tonin_outdated();
 
     // `tonin helm -- <args>` arrives here as `["--", ...]` after tonin strips "helm".
     // clap can't parse `--` as a subcommand, so handle it before parsing.
@@ -115,4 +134,45 @@ fn main() -> Result<()> {
         Cmd::History(a) => proxy::run_history(a),
         Cmd::Uninstall(a) => proxy::run_uninstall(a),
     }
+}
+
+/// Warn (don't block) when the dispatching `tonin` CLI is older than this
+/// plugin needs. `TONIN_CLI_VERSION` is set only when invoked via `tonin`
+/// dispatch, so direct `tonin-helm` runs never warn. Silence with
+/// `TONIN_NO_COMPAT_CHECK=1`.
+fn warn_if_tonin_outdated() {
+    if std::env::var_os("TONIN_NO_COMPAT_CHECK").is_some() {
+        return;
+    }
+    let Ok(cli) = std::env::var("TONIN_CLI_VERSION") else {
+        return;
+    };
+    if version_lt(&cli, MIN_TONIN_CLI) {
+        eprintln!(
+            "warning: tonin-helm {} needs tonin >= {} but you have {cli}.\n\
+             \x20        Run `tonin upgrade` to update both.",
+            env!("CARGO_PKG_VERSION"),
+            MIN_TONIN_CLI,
+        );
+    }
+}
+
+/// `true` if semver `a` is strictly older than `b`. Unparseable versions
+/// compare as "not older" so a malformed version never triggers a warning.
+fn version_lt(a: &str, b: &str) -> bool {
+    match (parse_version(a), parse_version(b)) {
+        (Some(x), Some(y)) => x < y,
+        _ => false,
+    }
+}
+
+/// Parse `vX.Y.Z` / `X.Y.Z[-pre]` into a comparable `(major, minor, patch)`.
+fn parse_version(s: &str) -> Option<(u64, u64, u64)> {
+    let core = s.trim().trim_start_matches('v');
+    let core = core.split(['-', '+']).next()?;
+    let mut parts = core.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next().unwrap_or("0").parse().ok()?;
+    let patch = parts.next().unwrap_or("0").parse().ok()?;
+    Some((major, minor, patch))
 }
