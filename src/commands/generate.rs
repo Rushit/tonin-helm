@@ -99,9 +99,30 @@ fn build_context(plan: &Plan) -> tera::Context {
     }
     ctx.insert("pod_annotations", &pod_annotations);
 
+    // Service protocol. `backend` → gRPC; `http` → HTTP; `web` → frontend.
+    // A gRPC backend can ALSO expose an HTTP port via `plan.http_port`.
     let is_web = matches!(plan.kind, ServiceKind::Web);
+    let is_http = matches!(plan.kind, ServiceKind::Http);
     ctx.insert("is_web", &is_web);
-    ctx.insert("grpc_port", &(if is_web { 3000_u32 } else { 50051 }));
+    ctx.insert("is_http", &is_http);
+    ctx.insert("port", &plan.port);
+    ctx.insert("port_name", if is_web || is_http { "http" } else { "grpc" });
+    // Secondary HTTP port (0 when absent), so the chart can render it alongside gRPC.
+    ctx.insert("http_port", &plan.http_port.unwrap_or(0));
+
+    // HTTP health probe. Always insert the keys (Tera needs them defined); the
+    // chart only renders a probe when `health_enabled` is true.
+    ctx.insert("health_enabled", &plan.health.is_some());
+    match &plan.health {
+        Some(h) => {
+            ctx.insert("health_path", &h.path);
+            ctx.insert("health_port", &h.port);
+        }
+        None => {
+            ctx.insert("health_path", "/health");
+            ctx.insert("health_port", &plan.port);
+        }
+    }
 
     // ---- Database. Always insert every key (with defaults) so the Tera
     //      templates never hit an undefined variable when [database] is absent.
@@ -554,5 +575,119 @@ memory = "64Mi"
         assert!(values.contains("keys: []"));
         // mesh=none -> no cilium policy.
         assert!(values.contains("networkPolicy:\n  enabled: false"));
+    }
+
+    const HTTP_TOML: &str = r#"
+schema = "v1"
+[service]
+name    = "web-api"
+version = "0.1.0"
+type    = "http"
+port    = 7001
+[service.health]
+path = "/healthz"
+[deploy]
+replicas  = 1
+mesh      = "cilium"
+namespace = "demo"
+[resources]
+cpu    = "100m"
+memory = "128Mi"
+"#;
+
+    #[test]
+    fn http_service_uses_http_port_name_probe_and_no_mcp() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(svc.path(), HTTP_TOML);
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        let values = read(&out.join("values.yaml"));
+        assert!(values.contains("portName: http"));
+        assert!(values.contains("port: 7001"));
+        assert!(
+            values.contains("httpPort: 0"),
+            "http-only has no secondary port"
+        );
+        // [service.health] customizes the probe.
+        assert!(values.contains("path: \"/healthz\""));
+        // http forces the mcp sidecar off (resolved in tonin-plugin).
+        assert!(values.contains("mcp:\n  enabled: false"));
+        // The chart ships the httpGet probe + parameterized port name.
+        let deployment = read(&out.join("templates").join("deployment.yaml"));
+        assert!(deployment.contains("livenessProbe"));
+        assert!(deployment.contains(".Values.service.portName"));
+        assert!(deployment.contains(".Values.service.health.enabled"));
+    }
+
+    #[test]
+    fn backend_defaults_to_grpc_port_name_without_http_or_probe() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(svc.path(), RICH_TOML);
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        let values = read(&out.join("values.yaml"));
+        assert!(values.contains("portName: grpc"));
+        assert!(values.contains("port: 50051"));
+        assert!(
+            values.contains("httpPort: 0"),
+            "gRPC backend has no http port"
+        );
+        assert!(
+            values.contains("health:\n    enabled: false"),
+            "no probe unless declared"
+        );
+    }
+
+    #[test]
+    fn backend_with_http_block_renders_secondary_port_and_probe() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(
+            svc.path(),
+            r#"
+schema = "v1"
+[service]
+name    = "collector"
+version = "0.1.0"
+[service.http]
+port = 8081
+health_path = "/health"
+[deploy]
+replicas  = 1
+mesh      = "cilium"
+namespace = "demo"
+[resources]
+cpu    = "100m"
+memory = "128Mi"
+"#,
+        );
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        let values = read(&out.join("values.yaml"));
+        assert!(values.contains("portName: grpc"), "gRPC stays the primary");
+        assert!(values.contains("port: 50051"));
+        assert!(
+            values.contains("httpPort: 8081"),
+            "secondary http port exposed"
+        );
+        assert!(values.contains("path: \"/health\""));
+        assert!(values.contains("health:\n    enabled: true"));
     }
 }

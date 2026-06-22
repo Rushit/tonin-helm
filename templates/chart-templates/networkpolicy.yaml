@@ -21,6 +21,9 @@ spec:
       toPorts:
         - ports:
             - { port: "{{ $.Values.networkPolicy.port }}", protocol: TCP }
+            {{- if gt (int $.Values.service.httpPort) 0 }}
+            - { port: "{{ $.Values.service.httpPort }}", protocol: TCP }
+            {{- end }}
             {{- if $.Values.networkPolicy.mcp }}
             - { port: "{{ $.Values.service.mcpPort }}", protocol: TCP }
             {{- end }}
@@ -33,6 +36,9 @@ spec:
       toPorts:
         - ports:
             - { port: "{{ .Values.networkPolicy.port }}", protocol: TCP }
+            {{- if gt (int .Values.service.httpPort) 0 }}
+            - { port: "{{ .Values.service.httpPort }}", protocol: TCP }
+            {{- end }}
             {{- if .Values.networkPolicy.mcp }}
             - { port: "{{ .Values.service.mcpPort }}", protocol: TCP }
             {{- end }}
