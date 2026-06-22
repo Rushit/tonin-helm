@@ -118,9 +118,10 @@ Two categories, both embedded via `include_dir`:
 - `select_env(hint)` — `$TONIN_ENV` → hint → `"dev"`
 - All resolved types: `DatabaseSpec`, `CacheSpec`, `Mesh`, `ServiceKind`, etc.
 
-**Version dep:** `Cargo.toml` uses `tonin-plugin = "0.5.4"` (crates.io). Cargo resolves
+**Version dep:** `Cargo.toml` uses `tonin-plugin = "0.6"` (crates.io). Cargo resolves
 the latest compatible patch automatically. When `tonin-plugin` gains a new field that
-`tonin-helm` needs, bump the lower bound here to match.
+`tonin-helm` needs, bump the lower bound here to match — `tonin-helm` 0.3.x requires
+`tonin-plugin`/`tonin` **0.6.0+** (per-environment namespaces and dependencies).
 
 ## Adding a command
 
