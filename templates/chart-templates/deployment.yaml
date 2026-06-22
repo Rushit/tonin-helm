@@ -103,15 +103,25 @@ spec:
             {{- end }}
           {{- if .Values.service.health.enabled }}
           livenessProbe:
+            {{- if .Values.service.health.grpc }}
+            grpc:
+              port: {{ .Values.service.health.port }}
+            {{- else }}
             httpGet:
               path: {{ .Values.service.health.path }}
               port: {{ .Values.service.health.port }}
+            {{- end }}
             periodSeconds: 10
             failureThreshold: 3
           readinessProbe:
+            {{- if .Values.service.health.grpc }}
+            grpc:
+              port: {{ .Values.service.health.port }}
+            {{- else }}
             httpGet:
               path: {{ .Values.service.health.path }}
               port: {{ .Values.service.health.port }}
+            {{- end }}
             periodSeconds: 5
             failureThreshold: 3
           {{- end }}
