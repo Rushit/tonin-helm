@@ -16,7 +16,8 @@ path = "src/main.rs"
 
 [dependencies]
 # Plan API — reads tonin.toml and resolves env overlays.
-tonin-plugin = "0.5.6"
+# 0.6 adds per-environment namespaces/dependencies ({env} + table form).
+tonin-plugin = "0.6"
 
 anyhow        = "1"
 clap          = { version = "4", features = ["derive"] }
