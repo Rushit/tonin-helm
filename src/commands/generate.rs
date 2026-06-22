@@ -690,4 +690,69 @@ memory = "128Mi"
         assert!(values.contains("path: \"/health\""));
         assert!(values.contains("health:\n    enabled: true"));
     }
+
+    #[test]
+    fn per_env_depends_on_resolves_namespaces_into_values() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(
+            svc.path(),
+            r#"
+schema = "v1"
+[service]
+name    = "orders"
+version = "0.1.0"
+type    = "http"
+port    = 7001
+[deploy]
+namespace = "orders-{env}"
+replicas  = 1
+mesh      = "cilium"
+[resources]
+cpu    = "100m"
+memory = "256Mi"
+[depends_on]
+identity = "platform-{env}"
+billing  = { namespace = "billing-{env}", prod = "billing-shared" }
+audit    = { namespace = "security-{env}", envs = ["prod"] }
+"#,
+        );
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["dev".into(), "prod".into()],
+        })
+        .unwrap();
+
+        // prod: {env} → prod, per-env override wins, prod-only dep present.
+        let prod = read(&out.join("values-prod.yaml"));
+        assert!(
+            prod.contains("- name: identity\n      namespace: platform-prod"),
+            "{prod}"
+        );
+        assert!(
+            prod.contains("- name: billing\n      namespace: billing-shared"),
+            "{prod}"
+        );
+        assert!(
+            prod.contains("- name: audit\n      namespace: security-prod"),
+            "{prod}"
+        );
+
+        // dev: default namespace (not the prod override), prod-only dep absent.
+        let dev = read(&out.join("values-dev.yaml"));
+        assert!(
+            dev.contains("- name: identity\n      namespace: platform-dev"),
+            "{dev}"
+        );
+        assert!(
+            dev.contains("- name: billing\n      namespace: billing-dev"),
+            "{dev}"
+        );
+        assert!(
+            !dev.contains("billing-shared"),
+            "prod override must not leak into dev: {dev}"
+        );
+        assert!(!dev.contains("name: audit"), "audit is prod-only: {dev}");
+    }
 }
