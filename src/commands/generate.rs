@@ -110,17 +110,20 @@ fn build_context(plan: &Plan) -> tera::Context {
     // Secondary HTTP port (0 when absent), so the chart can render it alongside gRPC.
     ctx.insert("http_port", &plan.http_port.unwrap_or(0));
 
-    // HTTP health probe. Always insert the keys (Tera needs them defined); the
-    // chart only renders a probe when `health_enabled` is true.
+    // Health probe. Always insert the keys (Tera needs them defined); the chart
+    // renders a probe when `health_enabled` is true. `health_grpc` selects a
+    // native `grpc:` probe (gRPC services) vs `httpGet` (http/web/backend-http).
     ctx.insert("health_enabled", &plan.health.is_some());
     match &plan.health {
         Some(h) => {
             ctx.insert("health_path", &h.path);
             ctx.insert("health_port", &h.port);
+            ctx.insert("health_grpc", &h.grpc);
         }
         None => {
             ctx.insert("health_path", "/health");
             ctx.insert("health_port", &plan.port);
+            ctx.insert("health_grpc", &false);
         }
     }
 
@@ -626,7 +629,7 @@ memory = "128Mi"
     }
 
     #[test]
-    fn backend_defaults_to_grpc_port_name_without_http_or_probe() {
+    fn backend_gets_native_grpc_probe_by_default() {
         let svc = tempfile::tempdir().unwrap();
         write_service(svc.path(), RICH_TOML);
         let out = svc.path().join("chart");
@@ -639,14 +642,22 @@ memory = "128Mi"
 
         let values = read(&out.join("values.yaml"));
         assert!(values.contains("portName: grpc"));
-        assert!(values.contains("port: 50051"));
         assert!(
             values.contains("httpPort: 0"),
             "gRPC backend has no http port"
         );
+        // A pure gRPC backend gets an auto native grpc: probe on the gRPC port
+        // (httpGet on a gRPC port can never succeed).
+        assert!(values.contains("health:\n    enabled: true"), "{values}");
         assert!(
-            values.contains("health:\n    enabled: false"),
-            "no probe unless declared"
+            values.contains("grpc: true"),
+            "gRPC service uses a grpc: probe: {values}"
+        );
+        // The deployment template branches to a grpc: probe on health.grpc.
+        let deployment = read(&out.join("templates").join("deployment.yaml"));
+        assert!(
+            deployment.contains(".Values.service.health.grpc"),
+            "{deployment}"
         );
     }
 

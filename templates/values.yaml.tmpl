@@ -18,6 +18,7 @@ service:
   # HTTP health probe (httpGet). Rendered only when enabled.
   health:
     enabled: {% if health_enabled %}true{% else %}false{% endif %}
+    grpc: {% if health_grpc %}true{% else %}false{% endif %}
     path: "{{ health_path }}"
     port: {{ health_port }}
 
