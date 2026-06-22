@@ -22,7 +22,7 @@ mod commands;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use commands::{generate, proxy};
+use commands::{check, generate, proxy};
 
 #[derive(Parser)]
 #[command(
@@ -67,6 +67,10 @@ enum Cmd {
     /// `chart/values-<env>.yaml` (one per env), and the generic
     /// `chart/templates/` Go template files.
     Generate(generate::GenerateArgs),
+
+    /// Verify that the committed chart/ matches what `generate` would produce.
+    /// Exits 1 with a diff summary if anything is stale.
+    Check(check::CheckArgs),
 
     /// Deploy to a cluster: `helm upgrade --install` with context auto-resolved.
     Upgrade(proxy::UpgradeArgs),
@@ -126,6 +130,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
         Cmd::Generate(a) => generate::run(a),
+        Cmd::Check(a) => check::run(a),
         Cmd::Upgrade(a) => proxy::run_upgrade(a),
         Cmd::Template(a) => proxy::run_template(a),
         Cmd::Diff(a) => proxy::run_diff(a),
