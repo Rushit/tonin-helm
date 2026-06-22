@@ -6,6 +6,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 Helm charts from `tonin.toml` and proxies lifecycle commands (`upgrade`, `diff`, `status`,
 etc.) to the `helm` CLI with the correct values files wired up automatically.
 
+## Agent workflow (branches, commits, PRs)
+
+When making changes in this repo, always work on a branch and open a PR — never
+commit to `main` directly.
+
+- **One branch per work item.** Branch off the latest `origin/main`
+  (`git fetch origin main && git switch -c <type>/<short-name> origin/main`).
+  Keep unrelated changes on separate branches/PRs; don't stack them.
+- **Open a PR for review, don't self-merge.** `gh pr create --base main`, then
+  leave it for the maintainer to approve and merge.
+- **Concise commit messages.** Conventional Commits (`feat:`, `fix:`, `ci:`,
+  `test:`, `docs:`, `chore:`) with a one-line subject; add a body only when it
+  explains *why*. Do **not** add a `Co-authored-by` trailer.
+- **Green before pushing.** Run `make ci` (the pre-commit hook also runs it).
+
 ## Common commands
 
 Pinned toolchain: Rust `1.90` (`rust-toolchain.toml` is inherited from the tonin workspace
