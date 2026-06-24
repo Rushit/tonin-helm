@@ -5,9 +5,99 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use include_dir::{include_dir, Dir};
 use tera::Tera;
-use tonin_plugin::{MigrationRunOn, Plan, ServiceKind};
+use tonin_plugin::{MigrationRunOn, Plan, SecuritySection, ServiceKind};
 
 static TEMPLATES: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates");
+
+/// Implemented by each optional `tonin.toml` section that contributes keys to the Tera context.
+/// Adding a new section means a new `impl` here — `build_context` stays stable.
+trait HelmContributor {
+    fn contribute(&self, ctx: &mut tera::Context);
+}
+
+impl HelmContributor for Option<&SecuritySection> {
+    fn contribute(&self, ctx: &mut tera::Context) {
+        match self {
+            None => {
+                ctx.insert("has_pod_security", &false);
+                ctx.insert("has_container_security", &false);
+                ctx.insert("pod_security_context_yaml", &"");
+                ctx.insert("container_security_context_yaml", &"");
+            }
+            Some(sec) => {
+                match &sec.pod {
+                    None => {
+                        ctx.insert("has_pod_security", &false);
+                        ctx.insert("pod_security_context_yaml", &"");
+                    }
+                    Some(val) => {
+                        ctx.insert("has_pod_security", &true);
+                        ctx.insert("pod_security_context_yaml", &to_indented_yaml(val));
+                    }
+                }
+                match &sec.container {
+                    None => {
+                        ctx.insert("has_container_security", &false);
+                        ctx.insert("container_security_context_yaml", &"");
+                    }
+                    Some(val) => {
+                        ctx.insert("has_container_security", &true);
+                        ctx.insert("container_security_context_yaml", &to_indented_yaml(val));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Convert a TOML value to a 2-space-indented YAML string for embedding in `values.yaml`.
+/// Table keys are converted from `snake_case` to `camelCase`; already-camelCase keys pass through.
+fn to_indented_yaml(val: &toml::Value) -> String {
+    let converted = normalize_keys(val.clone());
+    let raw = serde_yaml::to_string(&converted).unwrap_or_default();
+    let content = raw.strip_prefix("---\n").unwrap_or(&raw);
+    content
+        .lines()
+        .map(|l| format!("  {l}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Recursively convert `snake_case` keys to `camelCase`. Keys without underscores pass through
+/// unchanged so callers can also write `camelCase` directly in `tonin.toml`.
+fn normalize_keys(val: toml::Value) -> toml::Value {
+    match val {
+        toml::Value::Table(tbl) => {
+            let converted = tbl
+                .into_iter()
+                .map(|(k, v)| (snake_to_camel(&k), normalize_keys(v)))
+                .collect();
+            toml::Value::Table(converted)
+        }
+        toml::Value::Array(arr) => {
+            toml::Value::Array(arr.into_iter().map(normalize_keys).collect())
+        }
+        other => other,
+    }
+}
+
+fn snake_to_camel(key: &str) -> String {
+    if !key.contains('_') {
+        return key.to_string();
+    }
+    let mut parts = key.split('_');
+    let first = parts.next().unwrap_or("").to_ascii_lowercase();
+    let rest: String = parts
+        .map(|p| {
+            let mut chars = p.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+            }
+        })
+        .collect();
+    first + &rest
+}
 
 /// Default environments rendered unless `--envs` overrides.
 const DEFAULT_ENVS: &[&str] = &["dev", "staging", "prod"];
@@ -207,6 +297,9 @@ fn build_context(plan: &Plan) -> tera::Context {
     ctx.insert("depends_on", &plan.depends_on);
 
     ctx.insert("env_name", &plan.selected_env);
+
+    plan.security.as_ref().contribute(&mut ctx);
+
     ctx
 }
 
@@ -470,6 +563,181 @@ gateway = "agnitiv-dev"
             secrets_at < stateful_at,
             "secrets.keys must be rendered before statefulEnv"
         );
+    }
+
+    #[test]
+    fn snake_case_security_converts_to_camel_case_yaml() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(
+            svc.path(),
+            r#"
+schema = "v1"
+[service]
+name    = "secure-api"
+version = "0.1.0"
+[deploy]
+replicas  = 1
+mesh      = "none"
+namespace = "demo"
+[resources]
+cpu    = "100m"
+memory = "128Mi"
+
+[security.pod]
+run_as_non_root = true
+run_as_user     = 65532
+fs_group        = 65532
+
+[security.container]
+allow_privilege_escalation = false
+read_only_root_filesystem  = true
+
+[security.container.capabilities]
+drop = ["ALL"]
+
+[security.container.seccomp_profile]
+type = "RuntimeDefault"
+"#,
+        );
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        let values = read(&out.join("values.yaml"));
+        assert!(values.contains("podSecurityContext:"), "{values}");
+        assert!(values.contains("runAsNonRoot: true"), "{values}");
+        assert!(values.contains("runAsUser: 65532"), "{values}");
+        assert!(values.contains("fsGroup: 65532"), "{values}");
+        assert!(values.contains("containerSecurityContext:"), "{values}");
+        assert!(
+            values.contains("allowPrivilegeEscalation: false"),
+            "{values}"
+        );
+        assert!(values.contains("readOnlyRootFilesystem: true"), "{values}");
+        assert!(values.contains("capabilities:"), "{values}");
+        assert!(values.contains("drop:"), "{values}");
+        assert!(values.contains("ALL"), "{values}");
+        assert!(values.contains("seccompProfile:"), "{values}");
+        assert!(values.contains("type: RuntimeDefault"), "{values}");
+
+        let deployment = read(&out.join("templates").join("deployment.yaml"));
+        assert!(
+            deployment.contains("with .Values.podSecurityContext"),
+            "{deployment}"
+        );
+        assert!(
+            deployment.contains("with .Values.containerSecurityContext"),
+            "{deployment}"
+        );
+    }
+
+    #[test]
+    fn camel_case_security_keys_pass_through_unchanged() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(
+            svc.path(),
+            r#"
+schema = "v1"
+[service]
+name    = "secure-api"
+version = "0.1.0"
+[deploy]
+replicas  = 1
+mesh      = "none"
+namespace = "demo"
+[resources]
+cpu    = "100m"
+memory = "128Mi"
+
+[security.pod]
+runAsNonRoot = true
+runAsUser    = 1000
+"#,
+        );
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        let values = read(&out.join("values.yaml"));
+        assert!(values.contains("runAsNonRoot: true"), "{values}");
+        assert!(values.contains("runAsUser: 1000"), "{values}");
+        assert!(!values.contains("containerSecurityContext:"), "{values}");
+    }
+
+    #[test]
+    fn no_security_section_omits_security_context_keys() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(
+            svc.path(),
+            r#"
+schema = "v1"
+[service]
+name    = "bare"
+version = "0.1.0"
+[deploy]
+replicas  = 1
+mesh      = "none"
+namespace = "demo"
+[resources]
+cpu    = "50m"
+memory = "64Mi"
+"#,
+        );
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        let values = read(&out.join("values.yaml"));
+        assert!(!values.contains("podSecurityContext"), "{values}");
+        assert!(!values.contains("containerSecurityContext"), "{values}");
+    }
+
+    #[test]
+    fn image_registry_from_toml_used_in_generated_values() {
+        let svc = tempfile::tempdir().unwrap();
+        write_service(
+            svc.path(),
+            r#"
+schema = "v1"
+[service]
+name    = "my-api"
+version = "2.0.0"
+[deploy]
+replicas  = 1
+mesh      = "none"
+namespace = "demo"
+[resources]
+cpu    = "50m"
+memory = "64Mi"
+
+[image]
+registry = "ghcr.io/myorg"
+"#,
+        );
+        let out = svc.path().join("chart");
+        run(GenerateArgs {
+            path: Some(svc.path().to_path_buf()),
+            out: Some(out.clone()),
+            envs: vec!["prod".into()],
+        })
+        .unwrap();
+
+        let values = read(&out.join("values.yaml"));
+        if std::env::var("TONIN_IMAGE_PREFIX").is_err() {
+            assert!(values.contains("ghcr.io/myorg/my-api"), "{values}");
+        }
     }
 
     #[test]

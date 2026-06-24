@@ -111,6 +111,44 @@ chart/
     extra-manifests.yaml  # deploy-time .Values.extraManifests (escape hatch)
 ```
 
+### Image registry (`[image]`)
+
+Override the default `micro/<name>:<version>` image with a registry:
+
+```toml
+[image]
+registry = "ghcr.io/myorg"   # → ghcr.io/myorg/<name>:<version> in values.yaml
+```
+
+Priority: `TONIN_IMAGE_PREFIX` env var → `[image].registry` → `micro/` fallback.
+
+### Security context (`[security]`)
+
+Declare Kubernetes pod and container security context natively in `tonin.toml`. Both sections are optional and fully independent:
+
+```toml
+# Distroless / nonroot image
+[security.pod]
+run_as_non_root = true   # → runAsNonRoot
+run_as_user     = 65532  # → runAsUser
+run_as_group    = 65532  # → runAsGroup
+fs_group        = 65532  # → fsGroup
+
+[security.container]
+allow_privilege_escalation = false   # → allowPrivilegeEscalation
+read_only_root_filesystem  = true    # → readOnlyRootFilesystem
+
+[security.container.capabilities]
+drop = ["ALL"]   # → capabilities.drop
+
+[security.container.seccomp_profile]
+type = "RuntimeDefault"   # → seccompProfile.type
+```
+
+Keys may be written in `snake_case` (auto-converted to `camelCase`) or already in `camelCase` — both work. Any current or future Kubernetes security context field works without a tonin-helm update.
+
+When present, `tonin helm generate` emits `podSecurityContext` / `containerSecurityContext` blocks in `values.yaml` and wires them into the Deployment via `{{- with .Values.podSecurityContext }}`. When absent, neither block is emitted — fully backward compatible.
+
 ### Migrations: init-container vs. Job
 
 `migrations.mode` selects how a declared `[migrations]` step runs:
@@ -207,6 +245,9 @@ chart values:
 | `[migrations]` (`run_on = "init-container"`) | migrations initContainer on the Deployment |
 | `[callers]` + `mesh = "cilium"` | CiliumNetworkPolicy ingress allowlist |
 | `[depends_on]` + `mesh = "cilium"` | CiliumNetworkPolicy egress allowlist (namespaces resolved per env via `{env}` / the table form) |
+| `[image].registry` | `image.repository` prefix in `values.yaml` (overrides `TONIN_IMAGE_PREFIX` env var or `micro/` fallback) |
+| `[security.pod]` | `podSecurityContext` in `values.yaml` + `{{- with .Values.podSecurityContext }}` in Deployment; snake_case keys auto-converted to camelCase |
+| `[security.container]` | `containerSecurityContext` in `values.yaml` + `{{- with .Values.containerSecurityContext }}` in Deployment |
 | Per-env `[deploy.<env>]` / `[database.<env>]` / … overlays, and `{env}` in namespaces | `values-<env>.yaml` overrides |
 
 ---

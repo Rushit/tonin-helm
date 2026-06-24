@@ -1,6 +1,6 @@
 [package]
 name        = "tonin-helm"
-version = "0.3.2"
+version = "0.3.3"
 edition     = "2021"
 rust-version = "1.90"
 license     = "Apache-2.0"
@@ -17,7 +17,8 @@ path = "src/main.rs"
 [dependencies]
 # Plan API — reads tonin.toml and resolves env overlays.
 # 0.6 adds per-environment namespaces/dependencies ({env} + table form).
-tonin-plugin = "0.6.2"
+tonin-plugin = "0.6.4"
+toml          = "0.8"
 
 anyhow        = "1"
 clap          = { version = "4", features = ["derive"] }

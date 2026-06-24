@@ -44,6 +44,15 @@ autoscaling:
   minReplicas: {{ replicas }}
   maxReplicas: {{ max_replicas }}
 
+{% if has_pod_security %}
+podSecurityContext:
+{{ pod_security_context_yaml }}
+{% endif %}
+{% if has_container_security %}
+containerSecurityContext:
+{{ container_security_context_yaml }}
+{% endif %}
+
 ingress:
   enabled: {% if expose %}true{% else %}false{% endif %}
   host: "{{ expose | default(value="") }}"
