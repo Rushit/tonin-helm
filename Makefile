@@ -5,7 +5,7 @@ VERSION ?=
 .DEFAULT_GOAL := help
 
 .PHONY: help build check fmt fmt-check lint doc test ci install install-hooks \
-        show-version version release publish
+        show-version version release publish check-version
 
 help: ## Show this help table
 	@awk 'BEGIN {FS = ":.*##"; printf "Available targets:\n\n"} \
@@ -33,7 +33,7 @@ doc: ## Build rustdoc — warnings denied
 test: ## Run tests
 	$(CARGO) test
 
-ci: fmt-check lint test doc ## Same gate CI runs (fmt + lint + test + doc)
+ci: fmt-check lint test doc check-version ## Same gate CI runs (fmt + lint + test + doc + version-sync)
 	@echo "ci: all checks passed"
 
 install: ## Install tonin-helm to ~/.cargo/bin
@@ -52,6 +52,20 @@ install-hooks: ## Wire up git hooks (run once after cloning)
 
 show-version: ## Print the current version (from /VERSION)
 	@cat VERSION
+
+check-version: ## Verify VERSION file and Cargo.toml [package].version are in sync
+	@FILE="$$(tr -d '[:space:]' < VERSION)"; \
+	 CARGO="$$(awk ' \
+	   /^\[package\]/ { s=1; next } \
+	   /^\[/ && s { s=0 } \
+	   s && /^version[[:space:]]*=/ { match($$0, /"[^"]+"/) ; print substr($$0, RSTART+1, RLENGTH-2) ; exit } \
+	 ' Cargo.toml)"; \
+	 if [ "$$FILE" != "$$CARGO" ]; then \
+	   echo "error: VERSION ($$FILE) and Cargo.toml ($$CARGO) are out of sync" >&2; \
+	   echo "fix:   scripts/bump-version.sh $$CARGO" >&2; \
+	   exit 1; \
+	 fi; \
+	 echo "check-version: ok ($$FILE)"
 
 version: ## Bump VERSION + Cargo.toml and commit (VERSION=X.Y.Z)
 	@test -n "$(VERSION)" || \
