@@ -1,5 +1,25 @@
 # tonin-helm
 
+> [!IMPORTANT]
+> ## 📦 This repository has been merged into [`tonin`](https://github.com/Rushit/tonin) and is now **archived (read-only)**.
+>
+> **Helm is now the default, built-in way to deploy tonin services.** The `tonin helm`
+> command and all chart templates ship as part of the `tonin` CLI itself — there is no
+> longer a separate `tonin-helm` plugin to install. All development continues in the
+> [tonin monorepo](https://github.com/Rushit/tonin).
+>
+> | | |
+> |---|---|
+> | **Source & development** | [`Rushit/tonin`](https://github.com/Rushit/tonin) — the `tonin helm` command + chart templates live here |
+> | **Install** | `curl -sSfL https://raw.githubusercontent.com/Rushit/tonin/main/scripts/install.sh \| bash` |
+> | **Usage** | `tonin helm generate`, `tonin helm upgrade`, `tonin helm diff`, … (built in, no plugin) |
+>
+> This repository is preserved for historical reference only. Issues and pull requests
+> are closed — please open them against [`Rushit/tonin`](https://github.com/Rushit/tonin)
+> instead. The documentation below is retained as-is and may be out of date.
+
+---
+
 **Helm chart generation and lifecycle management for [tonin](https://github.com/Rushit/tonin) services.**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Rushit/tonin-helm/ci.yml?branch=main)](https://github.com/Rushit/tonin-helm/actions)
